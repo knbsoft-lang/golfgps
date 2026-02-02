@@ -4,6 +4,10 @@ export default function App() {
   const [coords, setCoords] = useState(null);
   const [error, setError] = useState(null);
 
+  // Hole controls (1–18)
+  const [hole, setHole] = useState(1);
+  const MAX_HOLES = 18;
+
   useEffect(() => {
     if (!navigator.geolocation) {
       setError("Geolocation not supported");
@@ -29,6 +33,10 @@ export default function App() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  // Build filename: hole01.png, hole02.png, ... hole18.png
+  const holeStr = String(hole).padStart(2, "0");
+  const holeImg = `/GolfCorses/BelleGlades/Calusa/hole${holeStr}.png`;
+
   return (
     <div
       style={{
@@ -42,9 +50,10 @@ export default function App() {
         alignItems: "center",
       }}
     >
+      {/* Hole image */}
       <img
-        src="/GolfCorses/BelleGlades/Calusa/hole01.png"
-        alt="Calusa Hole 1"
+        src={holeImg}
+        alt={`Calusa Hole ${hole}`}
         style={{
           width: "100%",
           maxWidth: "900px",
@@ -52,6 +61,46 @@ export default function App() {
         }}
       />
 
+      {/* Hole controls */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "900px",
+          display: "flex",
+          gap: "10px",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: "10px",
+        }}
+      >
+        <button
+          onClick={() => setHole((h) => Math.max(1, h - 1))}
+          style={{
+            padding: "10px 14px",
+            fontSize: "16px",
+            cursor: "pointer",
+          }}
+        >
+          ◀ Prev
+        </button>
+
+        <div style={{ fontSize: "18px" }}>
+          Hole <b>{hole}</b> / {MAX_HOLES}
+        </div>
+
+        <button
+          onClick={() => setHole((h) => Math.min(MAX_HOLES, h + 1))}
+          style={{
+            padding: "10px 14px",
+            fontSize: "16px",
+            cursor: "pointer",
+          }}
+        >
+          Next ▶
+        </button>
+      </div>
+
+      {/* GPS readout */}
       <div style={{ padding: "10px", fontSize: "18px" }}>
         {coords ? (
           <>
