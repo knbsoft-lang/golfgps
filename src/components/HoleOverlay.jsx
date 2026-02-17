@@ -10,9 +10,10 @@ const BLOCK_B_NEAR_ENDPOINT_PX = 35;
 // Double-tap timing (ms)
 const DOUBLE_TAP_MS = 350;
 
-// NEW: Larger finger hit area for double-tap on B (does not change the visible dot)
-const B_HIT_SIZE = 44; // px (good finger size)
-const A_C_HIT_SIZE = 28; // px (easy drag without being huge)
+// Finger hit areas (bigger than visible markers)
+const HIT_A = 46;
+const HIT_B = 54;
+const HIT_C = 46;
 
 function normPoint(p, fallback) {
   if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
@@ -51,10 +52,7 @@ export default function HoleOverlay({
   initialA,
   initialC,
 
-  // Setup lock:
   setupEnabled = false,
-
-  // Allow B to be added/moved in PLAY mode
   allowPlayB = true,
 
   onStateChange,
@@ -153,9 +151,8 @@ export default function HoleOverlay({
     setDragging(null);
   }
 
-  // NEW RULE:
-  // A and C should be draggable in PLAY and SETUP (same as requested)
-  // B should be draggable in PLAY if allowPlayB, and in SETUP always
+  // A and C draggable always
+  // B draggable in setup OR play (if allowPlayB)
   function canDrag(which) {
     if (which === "A" || which === "C") return true;
     if (which === "B") return setupEnabled || allowPlayB;
@@ -171,7 +168,7 @@ export default function HoleOverlay({
     if (which === "B") {
       if (!Bactive) return;
 
-      // ✅ DOUBLE TAP ON B => CLEAR TARGET
+      // DOUBLE TAP ON B => CLEAR TARGET
       const now = Date.now();
       if (now - lastBTapMsRef.current <= DOUBLE_TAP_MS) {
         lastBTapMsRef.current = 0;
@@ -219,7 +216,6 @@ export default function HoleOverlay({
   }
 
   function onLinePointerDown(e) {
-    // Allow adding B in setup OR play (if allowPlayB)
     if (!setupEnabled && !allowPlayB) return;
 
     e.preventDefault();
@@ -285,14 +281,7 @@ export default function HoleOverlay({
       >
         {!Bactive ? (
           <>
-            <line
-              x1={Apx.x}
-              y1={Apx.y}
-              x2={Cpx.x}
-              y2={Cpx.y}
-              stroke="lime"
-              strokeWidth="3"
-            />
+            <line x1={Apx.x} y1={Apx.y} x2={Cpx.x} y2={Cpx.y} stroke="lime" strokeWidth="3" />
             <line
               x1={Apx.x}
               y1={Apx.y}
@@ -312,47 +301,50 @@ export default function HoleOverlay({
         )}
       </svg>
 
-      {/* A draggable in play + setup */}
-      <Node
+      {/* A: outlined square 30x30 + center dot */}
+      <Marker
         kind="A"
         norm={A}
         onDown={(e) => onPointerDown("A", e)}
         pointerEnabled={true}
         cursor={"grab"}
-        hitSize={A_C_HIT_SIZE}
+        hitSize={HIT_A}
       />
 
-      {/* B visible when active; draggable in setup OR play (if allowPlayB). Double-tap clears. */}
+      {/* B: outlined circle 30x30 + center dot (only when active) */}
       {Bactive && (
-        <Node
+        <Marker
           kind="B"
           norm={Bpos}
           onDown={(e) => onPointerDown("B", e)}
           pointerEnabled={setupEnabled || allowPlayB}
           cursor={setupEnabled || allowPlayB ? "grab" : "default"}
-          hitSize={B_HIT_SIZE}
+          hitSize={HIT_B}
         />
       )}
 
-      {/* C draggable in play + setup */}
-      <Node
+      {/* C: keep as outlined circle (smaller) */}
+      <Marker
         kind="C"
         norm={C}
         onDown={(e) => onPointerDown("C", e)}
         pointerEnabled={true}
         cursor={"grab"}
-        hitSize={A_C_HIT_SIZE}
+        hitSize={HIT_C}
       />
     </div>
   );
 }
 
-function Node({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
-  const visibleSize = kind === "B" ? 14 : 8;
-  const hollow = kind === "B";
+function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
+  const hs = typeof hitSize === "number" ? hitSize : 44;
 
-  // Big invisible hit area for finger tapping/dragging
-  const hs = typeof hitSize === "number" ? hitSize : visibleSize;
+  // Visible shapes:
+  const visibleSize =
+    kind === "A" ? 30 : kind === "B" ? 30 : 18; // C smaller
+  const dotSize = kind === "C" ? 5 : 6;
+
+  const borderRadius = kind === "A" ? 6 : 999; // square with rounded corners for A
 
   return (
     <div
@@ -371,7 +363,7 @@ function Node({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
       }}
       onPointerDown={pointerEnabled ? onDown : undefined}
     >
-      {/* Visible dot */}
+      {/* Visible outline shape */}
       <div
         style={{
           position: "absolute",
@@ -380,12 +372,27 @@ function Node({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
           transform: "translate(-50%, -50%)",
           width: visibleSize,
           height: visibleSize,
-          borderRadius: "50%",
-          background: hollow ? "transparent" : "white",
+          borderRadius,
           border: "2px solid white",
+          background: "transparent",
           boxSizing: "border-box",
-          opacity: 0.95,
           pointerEvents: "none",
+          opacity: 0.95,
+        }}
+      />
+      {/* Center dot */}
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: dotSize,
+          height: dotSize,
+          borderRadius: 999,
+          background: "white",
+          pointerEvents: "none",
+          opacity: 0.95,
         }}
       />
     </div>

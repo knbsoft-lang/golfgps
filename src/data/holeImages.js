@@ -1,33 +1,18 @@
 // src/data/holeImages.js
-// Public folder paths (served from /)
+// Builds the URL to the hole image in /public/GolfCourses/...
+//
+// Your files are now WEBP:
+// public/GolfCourses/<Club>/<Nine>/hole01.webp ... hole09.webp
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
-}
+export function holeImagePath(clubKey, nine, holeNumber) {
+  if (!clubKey || !nine || !holeNumber) return null;
 
-/**
- * Supports multiple courses.
- *
- * Image naming rule (same everywhere):
- *   hole01.png ... hole09.png
- *
- * Folder rule:
- *   /public/GolfCourses/<CourseSlug>/<NineName>/hole01.png
- *
- * Examples:
- *   /GolfCourses/BelleGlades/Calusa/hole01.png
- *   /GolfCourses/OrangeBlossom/Front/hole01.png
- */
+  // NOTE: this must match your folder name exactly.
+  // Your COURSE_CATALOG keys are like "Orange Blossom" and "Belle Glades"
+  // but your folder names are "OrangeBlossom" and "BelleGlades"
+  // So we remove spaces to match those folders.
+  const safeClub = String(clubKey).replace(/\s+/g, "");
+  const hole = String(holeNumber).padStart(2, "0");
 
-// Map the course display name used in courses.js to a folder slug in /public/GolfCourses/
-const COURSE_SLUG = {
-  "Belle Glades": "BelleGlades",
-  "Orange Blossom": "OrangeBlossom",
-};
-
-export function holeImagePath(courseName, nine, holeWithinNine) {
-  if (!courseName || !nine || !holeWithinNine) return null;
-
-  const slug = COURSE_SLUG[courseName] || courseName.replace(/\s+/g, "");
-  return `/GolfCourses/${slug}/${nine}/hole${pad2(holeWithinNine)}.png`;
+  return `/GolfCourses/${safeClub}/${nine}/hole${hole}.webp`;
 }

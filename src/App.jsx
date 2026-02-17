@@ -1,18 +1,10 @@
 // src/App.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { COURSE_CATALOG } from "./data/courses";
-import {
-  haversineMeters,
-  metersToYards,
-  pointAlongGreatCircle,
-  roundYards,
-} from "./lib/geo";
+import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
-
-const AUTO_HIDE_WITHIN_GREEN_YARDS = 150;
-const AUTO_HIDE_WITHIN_TARGET_YARDS = 100;
 
 const HOLE_ASPECT_W = 9;
 const HOLE_ASPECT_H = 16;
@@ -29,16 +21,11 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
-function projectT(A, C, B) {
-  const vx = C.x - A.x;
-  const vy = C.y - A.y;
-  const wx = B.x - A.x;
-  const wy = B.y - A.y;
-  const vv = vx * vx + vy * vy;
-  if (vv === 0) return 0;
-  let t = (wx * vx + wy * vy) / vv;
-  t = Math.max(0, Math.min(1, t));
-  return t;
+// Distance in normalized overlay units (0..1)
+function distNorm(p1, p2) {
+  const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
+  const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
+  return Math.hypot(dx, dy);
 }
 
 function buildRound(club, mode, nineA, nineB) {
@@ -71,13 +58,14 @@ function buildRound(club, mode, nineA, nineB) {
     tee: h.tee,
     green: h.green,
     par: h.par,
+    hcp: h.hcp,
   }));
 
   return [...front, ...back];
 }
 
 function ArrowYardBox({ top, yards }) {
-  const W = 45;
+  const W = 52;
 
   return (
     <div
@@ -86,11 +74,11 @@ function ArrowYardBox({ top, yards }) {
         left: 0,
         top,
         width: W,
-        padding: "4px 5px",
+        padding: "5px 6px",
         background: "rgba(255,255,255,0.95)",
         color: "#000",
         border: "1px solid #000",
-        borderRadius: "0 8px 8px 0",
+        borderRadius: "0 10px 10px 0",
         boxShadow: "0 3px 10px rgba(0,0,0,0.22)",
         pointerEvents: "none",
         zIndex: 6,
@@ -99,10 +87,10 @@ function ArrowYardBox({ top, yards }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-        <div style={{ fontSize: 16, fontWeight: 900, lineHeight: 1.0 }}>
+        <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.0 }}>
           {typeof yards === "number" ? yards : "—"}
         </div>
-        <div style={{ fontSize: 9, fontWeight: 900, opacity: 0.9 }}>yd</div>
+        <div style={{ fontSize: 10, fontWeight: 900, opacity: 0.9 }}>yd</div>
       </div>
     </div>
   );
@@ -138,6 +126,9 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
 }
 
 export default function App() {
+  // ========= PAGE TOGGLE =========
+  const [page, setPage] = useState("home"); // "home" | "play"
+
   const clubKeysAll = Object.keys(COURSE_CATALOG);
 
   const [courseType, setCourseType] = useState("");
@@ -165,6 +156,7 @@ export default function App() {
     setNineA("");
     setNineB("");
     setTeeBox("");
+    setPage("home");
   }, [courseType]);
 
   useEffect(() => {
@@ -172,6 +164,7 @@ export default function App() {
     setNineA("");
     setNineB("");
     setTeeBox("");
+    setPage("home");
 
     if (!clubKey) return;
 
@@ -220,6 +213,13 @@ export default function App() {
 
   useEffect(() => setIdx(0), [courseType, clubKey, mode, nineA, nineB]);
 
+  // Home page: choose starting hole before PLAY
+  const [startHoleDisplay, setStartHoleDisplay] = useState("1");
+  useEffect(
+    () => setStartHoleDisplay("1"),
+    [courseType, clubKey, mode, nineA, nineB]
+  );
+
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
 
@@ -231,7 +231,7 @@ export default function App() {
         )}`
       : "";
 
-  // GPS
+  // ========= GPS =========
   const [pos, setPos] = useState(null);
   const [gpsStatus, setGpsStatus] = useState("GPS not started");
   const watchIdRef = useRef(null);
@@ -266,7 +266,7 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
-  // Yardages
+  // ========= Straight-line Yardages from GPS coordinates =========
   const teeToGreenYards = useMemo(() => {
     if (!hole) return null;
     return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
@@ -277,19 +277,18 @@ export default function App() {
     return roundYards(metersToYards(haversineMeters(pos, hole.green)));
   }, [hole, pos]);
 
-  // Par
+  // ========= Par + SI =========
   const parValue =
     typeof hole?.par === "number"
       ? hole.par
       : defaultParForHole(hole?.displayHole || hole?.hole || 1);
 
+  const siValue = typeof hole?.hcp === "number" ? hole.hcp : null;
+
   const parText = `Par ${parValue}`;
+  const siText = `SI ${siValue ?? "—"}`;
 
-  // Auto-hide B
-  const [bHidden, setBHidden] = useState(false);
-  useEffect(() => setBHidden(false), [holeKey]);
-
-  // Live overlay state + actions
+  // ========= Overlay live state =========
   const [liveOverlay, setLiveOverlay] = useState(null);
   useEffect(() => setLiveOverlay(null), [holeKey]);
 
@@ -298,80 +297,88 @@ export default function App() {
   // Setup Mode
   const [setupEnabled, setSetupEnabled] = useState(false);
 
-  // A/C/B source for yardages (live first, then saved)
-  const acbSource = useMemo(() => {
-    if (liveOverlay?.holeKey === holeKey && liveOverlay?.Bactive) {
-      return {
-        A: liveOverlay.A,
-        C: liveOverlay.C,
-        B: liveOverlay.B,
-        Bactive: true,
-      };
+  // ========= BASELINE (FROZEN) SCALE PER HOLE =========
+  // We use teeToGreenYards (from GPS coords) as the "true" straight-line length.
+  // We map overlay normalized distances to yards using a baseline A-C length captured once per hole.
+  const savedDefaults = useMemo(() => {
+    return holeKey ? getHoleDefaults(holeKey) : null;
+  }, [holeKey]);
+
+  const [baselineAC, setBaselineAC] = useState(null);
+
+  // When hole changes, prefer saved A/C as baseline if it exists
+  useEffect(() => {
+    if (!holeKey) {
+      setBaselineAC(null);
+      return;
     }
-    const saved = holeKey ? getHoleDefaults(holeKey) : null;
-    if (saved?.Bactive && saved?.A && saved?.C && saved?.B) {
-      return { A: saved.A, C: saved.C, B: saved.B, Bactive: true };
+    if (savedDefaults?.A && savedDefaults?.C) {
+      setBaselineAC({ A: savedDefaults.A, C: savedDefaults.C });
+    } else {
+      setBaselineAC(null);
     }
-    return null;
-  }, [liveOverlay, holeKey]);
+  }, [holeKey, savedDefaults]);
 
-  const bGeoInfo = useMemo(() => {
-    if (!holeKey || !hole) return null;
-    if (!acbSource?.Bactive) return null;
+  // If no saved baseline yet, capture from the first live overlay state we receive
+  useEffect(() => {
+    if (baselineAC) return;
+    if (!liveOverlay?.A || !liveOverlay?.C) return;
+    setBaselineAC({ A: liveOverlay.A, C: liveOverlay.C });
+  }, [baselineAC, liveOverlay]);
 
-    const t = projectT(acbSource.A, acbSource.C, acbSource.B);
+  const baselineLen = useMemo(() => {
+    if (!baselineAC?.A || !baselineAC?.C) return null;
+    const d = distNorm(baselineAC.A, baselineAC.C);
+    return d > 0.0001 ? d : null;
+  }, [baselineAC]);
 
-    const teeToGreenMeters = haversineMeters(hole.tee, hole.green);
-    const bMetersFromTee = teeToGreenMeters * t;
+  const yardsPerNormUnit = useMemo(() => {
+    if (typeof teeToGreenYards !== "number") return null;
+    if (!baselineLen) return null;
+    return teeToGreenYards / baselineLen;
+  }, [teeToGreenYards, baselineLen]);
 
-    const bGeo = pointAlongGreatCircle(hole.tee, hole.green, bMetersFromTee);
-    const bToGreenYards = roundYards(
-      metersToYards(haversineMeters(bGeo, hole.green))
-    );
-
-    return { t, bGeo, bToGreenYards, bMetersFromTee };
-  }, [holeKey, hole, acbSource]);
+  // Current points for modeled yardages (LIVE A/C/B)
+  const A = liveOverlay?.A || baselineAC?.A || null;
+  const C = liveOverlay?.C || baselineAC?.C || null;
+  const Bactive = !!liveOverlay?.Bactive;
+  const B = liveOverlay?.B || null;
 
   const teeToTargetYards = useMemo(() => {
-    if (!bGeoInfo) return null;
-    return roundYards(metersToYards(bGeoInfo.bMetersFromTee));
-  }, [bGeoInfo]);
+    if (!yardsPerNormUnit) return null;
+    if (!A || !B || !Bactive) return null;
+    return roundYards(distNorm(A, B) * yardsPerNormUnit);
+  }, [yardsPerNormUnit, A, B, Bactive]);
 
   const targetToGreenYards = useMemo(() => {
-    if (!bGeoInfo?.bGeo || !hole?.green) return null;
-    return roundYards(metersToYards(haversineMeters(bGeoInfo.bGeo, hole.green)));
-  }, [bGeoInfo, hole]);
+    if (!yardsPerNormUnit) return null;
+    if (!B || !C || !Bactive) return null;
+    return roundYards(distNorm(B, C) * yardsPerNormUnit);
+  }, [yardsPerNormUnit, B, C, Bactive]);
 
+  const modeledTotalYards = useMemo(() => {
+    if (!yardsPerNormUnit || !A || !C) return null;
+
+    if (!Bactive || !B) {
+      return roundYards(distNorm(A, C) * yardsPerNormUnit);
+    }
+
+    return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
+  }, [yardsPerNormUnit, A, B, C, Bactive]);
+
+  // ========= Arrow Box Visibility (NO AUTO HIDE) =========
+  // If no target: show Tee->Green.
+  // If target active: show AB + BC.
   const showTargetBoxes = useMemo(() => {
-    return !bHidden && typeof teeToTargetYards === "number";
-  }, [bHidden, teeToTargetYards]);
+    return Bactive && typeof teeToTargetYards === "number";
+  }, [Bactive, teeToTargetYards]);
 
-  useEffect(() => {
-    if (!hole || !pos) return;
-    if (bHidden) return;
-
-    if (
-      typeof youToGreenYards === "number" &&
-      youToGreenYards <= AUTO_HIDE_WITHIN_GREEN_YARDS
-    ) {
-      setBHidden(true);
-      return;
-    }
-
-    if (
-      typeof teeToTargetYards === "number" &&
-      teeToTargetYards <= AUTO_HIDE_WITHIN_TARGET_YARDS
-    ) {
-      setBHidden(true);
-      return;
-    }
-
-    if (bGeoInfo && typeof youToGreenYards === "number") {
-      if (youToGreenYards < bGeoInfo.bToGreenYards) setBHidden(true);
-    }
-  }, [hole, pos, youToGreenYards, teeToTargetYards, bGeoInfo, bHidden]);
+  const showGreenOnlyBox = useMemo(() => {
+    return !Bactive;
+  }, [Bactive]);
 
   const FOOTER_H = 60;
+
   const holeNumberText =
     hole?.displayHole != null ? String(hole.displayHole).padStart(2, "0") : "—";
 
@@ -395,6 +402,47 @@ export default function App() {
     if (pw === "golfgps") setSetupEnabled(true);
   }
 
+  function goPlay() {
+    if (!roundReady) return;
+
+    const desired = parseInt(startHoleDisplay || "1", 10);
+    const i = roundHoles.findIndex((h) => h.displayHole === desired);
+    setIdx(i >= 0 ? i : 0);
+
+    setPage("play");
+  }
+
+  function goHome() {
+    setPage("home");
+  }
+
+  function handleSaveDefaults() {
+    overlayActionsRef.current?.saveDefaults?.();
+    // If we are in setup and saving, also lock baseline to the saved A/C immediately
+    const st = overlayActionsRef.current?.getState?.();
+    if (st?.A && st?.C) setBaselineAC({ A: st.A, C: st.C });
+  }
+
+  const playTopButton = (
+    <button
+      onClick={goHome}
+      style={{
+        position: "fixed",
+        left: 10,
+        top: 10,
+        padding: "10px 12px",
+        borderRadius: 12,
+        border: "1px solid #333",
+        background: "white",
+        color: "black",
+        fontWeight: 900,
+        zIndex: 10000,
+      }}
+    >
+      HOME
+    </button>
+  );
+
   return (
     <div
       style={{
@@ -402,384 +450,408 @@ export default function App() {
         color: "white",
         background: "#0b0b0b",
         minHeight: "100vh",
-        paddingBottom: FOOTER_H + 24,
+        paddingBottom: page === "play" ? FOOTER_H + 24 : 24,
       }}
     >
-      {/* moved padding tighter */}
-      <div style={{ display: "flex", gap: 16, padding: "8px 16px 16px 16px" }}>
-        {/* LEFT COLUMN */}
-        <div style={{ width: 188, flex: "0 0 188px" }}>
-          {/* TITLE moved here and moved up */}
-          <div style={{ fontSize: 22, fontWeight: 900, margin: "0 0 8px 0" }}>
+      {page === "play" && playTopButton}
+
+      {/* HOME PAGE */}
+      {page === "home" && (
+        <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
+          <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>
             Golf GPS
           </div>
 
-          <div style={{ fontWeight: 900, marginBottom: 8, opacity: 0.9 }}>
-            Selections
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <SelectBox
-              value={courseType}
-              onChange={setCourseType}
-              placeholder="Course Type"
-              options={["Executive", "Championship"]}
-            />
-
-            {courseType && (
-              <SelectBox
-                value={clubKey}
-                onChange={setClubKey}
-                placeholder="Course"
-                options={filteredClubKeys}
-              />
-            )}
-
-            {courseType === "Executive" && clubKey && (
-              <SelectBox
-                value={teeBox}
-                onChange={setTeeBox}
-                placeholder="Tee Box"
-                options={TEE_BOXES}
-              />
-            )}
-
-            {courseType === "Championship" && clubKey && (
-              <>
-                <SelectBox
-                  value={mode}
-                  onChange={setMode}
-                  placeholder="9 or 18"
-                  options={[
-                    { value: "9", label: "9 holes" },
-                    { value: "18", label: "18 holes" },
-                  ]}
-                />
-
-                {mode && (
-                  <SelectBox
-                    value={nineA}
-                    onChange={setNineA}
-                    placeholder="First 9 holes"
-                    options={nineNames}
-                  />
-                )}
-
-                {mode === "18" && nineA && (
-                  <SelectBox
-                    value={nineB}
-                    onChange={setNineB}
-                    placeholder="Second 9 holes"
-                    options={nineNames.filter((n) => n !== nineA)}
-                  />
-                )}
-
-                {((mode === "9" && nineA) ||
-                  (mode === "18" && nineA && nineB)) && (
-                  <SelectBox
-                    value={teeBox}
-                    onChange={setTeeBox}
-                    placeholder="Tee Box"
-                    options={TEE_BOXES}
-                  />
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Yardages under selections */}
           <div
             style={{
-              marginTop: 12,
-              padding: 10,
               border: "1px solid #222",
-              borderRadius: 12,
+              borderRadius: 14,
               background: "#101010",
-              lineHeight: 1.5,
-              fontSize: 13,
-              opacity: 0.95,
+              padding: 12,
             }}
           >
-            <div style={{ fontWeight: 900, marginBottom: 6 }}>{gpsStatus}</div>
-            <div>
-              You → Green: <strong>{youToGreenYards ?? "—"} yd</strong>
+            <div style={{ fontWeight: 900, marginBottom: 10, opacity: 0.95 }}>
+              Selections
             </div>
-            <div>
-              Tee → Green: <strong>{teeToGreenYards ?? "—"} yd</strong>
-            </div>
-          </div>
-        </div>
 
-        {/* MAIN AREA */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {!roundReady ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <SelectBox
+                value={courseType}
+                onChange={setCourseType}
+                placeholder="Course Type"
+                options={["Executive", "Championship"]}
+              />
+
+              {courseType && (
+                <SelectBox
+                  value={clubKey}
+                  onChange={setClubKey}
+                  placeholder="Course"
+                  options={filteredClubKeys}
+                />
+              )}
+
+              {courseType === "Executive" && clubKey && (
+                <SelectBox
+                  value={teeBox}
+                  onChange={setTeeBox}
+                  placeholder="Tee Box"
+                  options={TEE_BOXES}
+                />
+              )}
+
+              {courseType === "Championship" && clubKey && (
+                <>
+                  <SelectBox
+                    value={mode}
+                    onChange={setMode}
+                    placeholder="9 or 18"
+                    options={[
+                      { value: "9", label: "9 holes" },
+                      { value: "18", label: "18 holes" },
+                    ]}
+                  />
+
+                  {mode && (
+                    <SelectBox
+                      value={nineA}
+                      onChange={setNineA}
+                      placeholder="First 9 holes"
+                      options={nineNames}
+                    />
+                  )}
+
+                  {mode === "18" && nineA && (
+                    <SelectBox
+                      value={nineB}
+                      onChange={setNineB}
+                      placeholder="Second 9 holes"
+                      options={nineNames.filter((n) => n !== nineA)}
+                    />
+                  )}
+
+                  {((mode === "9" && nineA) ||
+                    (mode === "18" && nineA && nineB)) && (
+                    <SelectBox
+                      value={teeBox}
+                      onChange={setTeeBox}
+                      placeholder="Tee Box"
+                      options={TEE_BOXES}
+                    />
+                  )}
+                </>
+              )}
+
+              {roundReady && roundHoles.length > 0 && (
+                <SelectBox
+                  value={startHoleDisplay}
+                  onChange={setStartHoleDisplay}
+                  placeholder="Starting Hole"
+                  options={roundHoles.map((h) => ({
+                    value: String(h.displayHole),
+                    label: `Start Hole ${String(h.displayHole).padStart(2, "0")} (${h.nine})`,
+                  }))}
+                />
+              )}
+            </div>
+
             <div
               style={{
-                marginTop: 6,
-                padding: 14,
+                marginTop: 12,
+                padding: 10,
+                border: "1px solid #222",
+                borderRadius: 12,
+                background: "#0d0d0d",
+                lineHeight: 1.5,
+                fontSize: 13,
+                opacity: 0.95,
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>{gpsStatus}</div>
+              <div style={{ opacity: 0.9 }}>
+                Tip: GPS lock may take 10–30 seconds after Airplane Mode.
+              </div>
+            </div>
+
+            <button
+              onClick={goPlay}
+              disabled={!roundReady}
+              style={{
+                marginTop: 12,
+                width: "100%",
+                padding: "14px 14px",
+                borderRadius: 14,
+                border: "1px solid #333",
+                background: roundReady ? "white" : "#1a1a1a",
+                color: roundReady ? "black" : "rgba(255,255,255,0.35)",
+                fontWeight: 900,
+                fontSize: 18,
+              }}
+            >
+              PLAY
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* PLAY PAGE */}
+      {page === "play" && (
+        <div style={{ display: "flex", gap: 16, padding: "8px 16px 16px 16px" }}>
+          {/* LEFT COLUMN */}
+          <div style={{ width: 200, flex: "0 0 200px" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, margin: "44px 0 8px 0" }}>
+              Round Info
+            </div>
+
+            <div
+              style={{
+                padding: 10,
                 border: "1px solid #222",
                 borderRadius: 12,
                 background: "#101010",
                 lineHeight: 1.5,
-                maxWidth: 720,
+                fontSize: 13,
+                opacity: 0.95,
               }}
             >
-              <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 6 }}>
-                Make selections on the left to start.
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>{gpsStatus}</div>
+              <div>
+                You → Green: <strong>{youToGreenYards ?? "—"} yd</strong>
               </div>
-              <div style={{ opacity: 0.85 }}>
-                You’ll see the hole image once your required dropdowns are chosen.
+              <div>
+                Tee → Green (straight): <strong>{teeToGreenYards ?? "—"} yd</strong>
+              </div>
+              <div>
+                Modeled total (A/B/C): <strong>{modeledTotalYards ?? "—"} yd</strong>
+              </div>
+              <div>
+                {parText} • {siText}
               </div>
             </div>
-          ) : (
-            <>
-              <div
+
+            {!setupEnabled ? (
+              <button
+                onClick={enterSetup}
                 style={{
-                  marginTop: 6,
-                  height: "calc(65vh + 200px)",
-                  border: "1px solid #222",
-                  position: "relative",
-                  display: "flex",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  overflow: "hidden",
+                  marginTop: 10,
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #333",
+                  background: "white",
+                  color: "black",
+                  fontWeight: 900,
                 }}
               >
-                <div
-                  style={{
-                    position: "relative",
-                    height: "100%",
-                    aspectRatio: `${HOLE_ASPECT_W} / ${HOLE_ASPECT_H}`,
-                    maxWidth: "100%",
-                  }}
-                >
-                  {showTargetBoxes && (
-                    <ArrowYardBox top={180} yards={targetToGreenYards} />
-                  )}
-                  {showTargetBoxes && (
-                    <ArrowYardBox top={450} yards={teeToTargetYards} />
-                  )}
-
-                  {imgSrc ? (
-                    bHidden ? (
-                      <img
-                        src={imgSrc}
-                        alt="Hole"
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                          display: "block",
-                        }}
-                        draggable={false}
-                      />
-                    ) : (
-                      <HoleOverlay
-                        imageSrc={imgSrc}
-                        resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}`}
-                        holeKey={holeKey}
-                        setupEnabled={setupEnabled}
-                        allowPlayB={true}
-                        onStateChange={(state) => setLiveOverlay(state)}
-                        onActionsReady={(actions) => {
-                          overlayActionsRef.current = actions;
-                        }}
-                      />
-                    )
-                  ) : (
-                    <div style={{ padding: 12, color: "white" }}>
-                      No image (check file path/name)
-                    </div>
-                  )}
-                </div>
+                Setup
+              </button>
+            ) : (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #1b1b1b",
+                  background: "rgba(0,0,0,0.65)",
+                  color: "white",
+                  fontWeight: 900,
+                  letterSpacing: 0.5,
+                }}
+              >
+                SETUP MODE
               </div>
+            )}
+          </div>
 
-              {setupEnabled && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "flex",
-                    gap: 10,
-                    justifyContent: "center",
-                  }}
-                >
-                  <button
-                    onClick={() => overlayActionsRef.current?.saveDefaults?.()}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "white",
-                      fontWeight: 900,
+          {/* MAIN AREA */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                marginTop: 6,
+                height: "calc(65vh + 200px)",
+                border: "1px solid #222",
+                position: "relative",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  position: "relative",
+                  height: "100%",
+                  aspectRatio: `${HOLE_ASPECT_W} / ${HOLE_ASPECT_H}`,
+                  maxWidth: "100%",
+                }}
+              >
+                {/* NO TARGET => Tee->Green */}
+                {showGreenOnlyBox && (
+  <ArrowYardBox top={260} yards={typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards} />
+)}
+
+
+                {/* TARGET ACTIVE => BC + AB */}
+                {showTargetBoxes && <ArrowYardBox top={180} yards={targetToGreenYards} />}
+                {showTargetBoxes && <ArrowYardBox top={450} yards={teeToTargetYards} />}
+
+                {imgSrc ? (
+                  <HoleOverlay
+                    imageSrc={imgSrc}
+                    resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}`}
+                    holeKey={holeKey}
+                    setupEnabled={setupEnabled}
+                    allowPlayB={true}
+                    onStateChange={(state) => setLiveOverlay(state)}
+                    onActionsReady={(actions) => {
+                      overlayActionsRef.current = actions;
                     }}
-                  >
-                    Save Defaults
-                  </button>
-
-                  <button
-                    onClick={() => overlayActionsRef.current?.clearTarget?.()}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "white",
-                      fontWeight: 900,
-                    }}
-                  >
-                    Clear Target
-                  </button>
-
-                  <button
-                    onClick={() => setSetupEnabled(false)}
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "#f3f3f3",
-                      fontWeight: 900,
-                    }}
-                  >
-                    Exit Setup
-                  </button>
-                </div>
-              )}
-
-              <div style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
-                {!setupEnabled ? (
-                  <>
-                    Tap the green line to set a target. Drag to change location.
-                    Double Tap to clear it.
-                  </>
+                  />
                 ) : (
-                  <>
-                    Setup mode: drag A/C, tap the line to set B, then Save Defaults.
-                    (B also supports double-tap to clear.)
-                  </>
+                  <div style={{ padding: 12, color: "white" }}>
+                    No image (check file path/name)
+                  </div>
                 )}
               </div>
-            </>
-          )}
-        </div>
-      </div>
+            </div>
 
-      {/* Bottom-left button/badge zone */}
-      {!setupEnabled ? (
-        <button
-          onClick={enterSetup}
-          style={{
-            position: "fixed",
-            left: 10,
-            bottom: FOOTER_H + 10,
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #333",
-            background: "white",
-            color: "black",
-            fontWeight: 900,
-            zIndex: 9999,
-          }}
-        >
-          Setup
-        </button>
-      ) : (
-        <div
-          style={{
-            position: "fixed",
-            left: 10,
-            bottom: FOOTER_H + 10,
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #1b1b1b",
-            background: "rgba(0,0,0,0.65)",
-            color: "white",
-            fontWeight: 900,
-            letterSpacing: 0.5,
-            zIndex: 9999,
-          }}
-        >
-          SETUP MODE
+            {setupEnabled && (
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  gap: 10,
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  onClick={handleSaveDefaults}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                  }}
+                >
+                  Save Defaults
+                </button>
+
+                <button
+                  onClick={() => overlayActionsRef.current?.clearTarget?.()}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                  }}
+                >
+                  Clear Target
+                </button>
+
+                <button
+                  onClick={() => setSetupEnabled(false)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#f3f3f3",
+                    fontWeight: 900,
+                  }}
+                >
+                  Exit Setup
+                </button>
+              </div>
+            )}
+
+            <div style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
+              No auto-hide. No target shows Tee→Green. Target shows AB + BC.
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 60,
+              background: "white",
+              color: "black",
+              borderTop: "1px solid #ddd",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingLeft: 10,
+              paddingRight: 10,
+              zIndex: 9999,
+              boxShadow: "0 -2px 10px rgba(0,0,0,0.10)",
+            }}
+          >
+            <button
+              onClick={prevHole}
+              disabled={idx === 0}
+              style={{
+                width: 60,
+                height: 44,
+                borderRadius: 10,
+                border: "1px solid #000",
+                background: "white",
+                color: "black",
+                fontSize: 30,
+                fontWeight: 900,
+                lineHeight: "30px",
+              }}
+            >
+              {"<"}
+            </button>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                minWidth: 270,
+                justifyContent: "center",
+              }}
+            >
+              <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>
+                {holeNumberText}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
+                <div style={{ fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
+                  Straight {teeToGreenYards ?? "—"} yd
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
+                  {parText} • {siText}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={nextHole}
+              disabled={idx === roundHoles.length - 1}
+              style={{
+                width: 60,
+                height: 44,
+                borderRadius: 10,
+                border: "1px solid #000",
+                background: "white",
+                color: "black",
+                fontSize: 30,
+                fontWeight: 900,
+                lineHeight: "30px",
+              }}
+            >
+              {">"}
+            </button>
+          </div>
         </div>
       )}
-
-      {/* Footer */}
-      <div
-        style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 60,
-          background: "white",
-          color: "black",
-          borderTop: "1px solid #ddd",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingLeft: 10,
-          paddingRight: 10,
-          zIndex: 9999,
-          boxShadow: "0 -2px 10px rgba(0,0,0,0.10)",
-        }}
-      >
-        <button
-          onClick={prevHole}
-          disabled={idx === 0}
-          style={{
-            width: 60,
-            height: 44,
-            borderRadius: 10,
-            border: "1px solid #000",
-            background: "white",
-            color: "black",
-            fontSize: 30,
-            fontWeight: 900,
-            lineHeight: "30px",
-          }}
-        >
-          {"<"}
-        </button>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            minWidth: 220,
-            justifyContent: "center",
-          }}
-        >
-          <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>
-            {holeNumberText}
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
-            <div style={{ fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
-              YTG {teeToGreenYards ?? "—"} yd
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
-              {parText}
-            </div>
-          </div>
-        </div>
-
-        <button
-          onClick={nextHole}
-          disabled={idx === roundHoles.length - 1}
-          style={{
-            width: 60,
-            height: 44,
-            borderRadius: 10,
-            border: "1px solid #000",
-            background: "white",
-            color: "black",
-            fontSize: 30,
-            fontWeight: 900,
-            lineHeight: "30px",
-          }}
-        >
-          {">"}
-        </button>
-      </div>
     </div>
   );
 }
