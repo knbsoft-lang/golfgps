@@ -61,7 +61,7 @@ function buildRound(club, mode, nineA, nineB) {
 }
 
 function ArrowYardBox({ top, yards, left = 0 }) {
-  // Arrow boxes: +25% size; now offset right by 50px via `left`
+  // Arrow boxes: positioned 50px right (left passed in)
   const W = 65;
 
   return (
@@ -266,7 +266,6 @@ export default function App() {
     return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
   }, [hole]);
 
-  // kept for future use
   useMemo(() => {
     if (!hole || !pos) return null;
     return roundYards(metersToYards(haversineMeters(pos, hole.green)));
@@ -363,16 +362,16 @@ export default function App() {
   // Layout constants
   const FOOTER_H = 60;
 
-  // Buttons moved to TOP with 40px margin
+  // Top buttons
   const TOP_BTN_TOP = 40;
   const TOP_BTN_W = 92;
   const TOP_BTN_H = 44;
 
-  // Arrow box offsets
-  const ARROW_LEFT = 50; // move right 50px
-  const ARROW_TOP_BC = 180 + 60; // Target->Green down 60
-  const ARROW_TOP_AB = 450 + 90; // Tee->Target down 90
-  const ARROW_TOP_AC = 260; // Tee->Green stays same (only shown when no target)
+  // Arrow boxes: move right 50px
+  const ARROW_LEFT = 50;
+  const ARROW_TOP_BC = 240; // (was 180 + 60)
+  const ARROW_TOP_AB = 540; // (was 450 + 90)
+  const ARROW_TOP_AC = 260;
 
   const holeNumberText =
     hole?.displayHole != null ? String(hole.displayHole).padStart(2, "0") : "—";
@@ -565,6 +564,27 @@ export default function App() {
             >
               PLAY
             </button>
+
+            {/* Moved label to HOME page under PLAY */}
+            <div
+              style={{
+                marginTop: 10,
+                background: "rgba(0,0,0,0.55)",
+                border: "1px solid rgba(255,255,255,0.18)",
+                borderRadius: 14,
+                padding: "10px 12px",
+                textAlign: "center",
+                fontSize: 16,
+                fontWeight: 800,
+                lineHeight: 1.2,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              Tap on the green line to set target. Double tap target to remove.
+              Drag target to Move
+            </div>
           </div>
         </div>
       )}
@@ -608,10 +628,18 @@ export default function App() {
 
                 {/* TARGET ACTIVE => BC + AB */}
                 {showTargetBoxes && (
-                  <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_BC} yards={targetToGreenYards} />
+                  <ArrowYardBox
+                    left={ARROW_LEFT}
+                    top={ARROW_TOP_BC}
+                    yards={targetToGreenYards}
+                  />
                 )}
                 {showTargetBoxes && (
-                  <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
+                  <ArrowYardBox
+                    left={ARROW_LEFT}
+                    top={ARROW_TOP_AB}
+                    yards={teeToTargetYards}
+                  />
                 )}
 
                 {imgSrc ? (
@@ -632,41 +660,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Instruction label: wider, +10% font, closer to footer */}
-                <div
-                  style={{
-                    position: "absolute",
-                    left: 10,
-                    right: 10,
-                    bottom: 6, // closer to footer
-                    display: "flex",
-                    justifyContent: "center",
-                    pointerEvents: "none",
-                    zIndex: 7,
-                  }}
-                >
-                  <div
-                    style={{
-                      background: "rgba(0,0,0,0.55)",
-                      border: "1px solid rgba(255,255,255,0.18)",
-                      borderRadius: 14,
-                      padding: "10px 12px",
-                      textAlign: "center",
-                      fontSize: 16.5, // was 15 -> +10%
-                      fontWeight: 800,
-                      lineHeight: 1.2,
-                      maxWidth: 900, // wider so it stays on one line
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                  >
-                    Tap on the green line to set target. Double tap target to
-                    remove. Drag target to Move
-                  </div>
-                </div>
-
-                {/* HOME + SETUP moved to TOP with 40px gap */}
+                {/* HOME + SETUP buttons (top) */}
                 <button
                   onClick={goHome}
                   style={{
@@ -708,7 +702,10 @@ export default function App() {
                   SETUP
                 </button>
 
-                {/* SETUP MODE CONTROLS: move right, smaller buttons/fonts */}
+                {/* SETUP MODE CONTROLS
+                    IMPORTANT FIX: wrapper ignores touch so you can drag C underneath
+                    Only the buttons/label accept touch.
+                */}
                 {setupEnabled && (
                   <div
                     style={{
@@ -718,9 +715,10 @@ export default function App() {
                       top: 10,
                       display: "flex",
                       gap: 10,
-                      justifyContent: "flex-end", // push to the right
+                      justifyContent: "flex-end",
                       flexWrap: "wrap",
                       zIndex: 10001,
+                      pointerEvents: "none", // <-- key fix
                     }}
                   >
                     <div
@@ -731,7 +729,8 @@ export default function App() {
                         background: "rgba(0,0,0,0.55)",
                         fontWeight: 900,
                         letterSpacing: 0.5,
-                        fontSize: 13, // ~20% smaller
+                        fontSize: 13,
+                        pointerEvents: "auto", // clickable
                       }}
                     >
                       SETUP MODE
@@ -745,7 +744,8 @@ export default function App() {
                         border: "1px solid #333",
                         background: "white",
                         fontWeight: 900,
-                        fontSize: 13, // ~20% smaller
+                        fontSize: 13,
+                        pointerEvents: "auto", // clickable
                       }}
                     >
                       Save Defaults
@@ -759,7 +759,8 @@ export default function App() {
                         border: "1px solid #333",
                         background: "white",
                         fontWeight: 900,
-                        fontSize: 13, // ~20% smaller
+                        fontSize: 13,
+                        pointerEvents: "auto", // clickable
                       }}
                     >
                       Clear Target
@@ -773,7 +774,8 @@ export default function App() {
                         border: "1px solid #333",
                         background: "#f3f3f3",
                         fontWeight: 900,
-                        fontSize: 13, // ~20% smaller
+                        fontSize: 13,
+                        pointerEvents: "auto", // clickable
                       }}
                     >
                       Exit Setup
