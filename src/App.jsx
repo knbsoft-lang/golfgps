@@ -6,9 +6,6 @@ import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
-const HOLE_ASPECT_W = 9;
-const HOLE_ASPECT_H = 16;
-
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
 
 function defaultParForHole(holeNumber) {
@@ -65,7 +62,8 @@ function buildRound(club, mode, nineA, nineB) {
 }
 
 function ArrowYardBox({ top, yards }) {
-  const W = 52;
+  // +25% size (box + fonts)
+  const W = 65;
 
   return (
     <div
@@ -74,23 +72,23 @@ function ArrowYardBox({ top, yards }) {
         left: 0,
         top,
         width: W,
-        padding: "5px 6px",
+        padding: "7px 8px",
         background: "rgba(255,255,255,0.95)",
         color: "#000",
         border: "1px solid #000",
-        borderRadius: "0 10px 10px 0",
+        borderRadius: "0 12px 12px 0",
         boxShadow: "0 3px 10px rgba(0,0,0,0.22)",
         pointerEvents: "none",
         zIndex: 6,
         clipPath:
-          "polygon(0% 0%, calc(100% - 10px) 0%, 100% 50%, calc(100% - 10px) 100%, 0% 100%)",
+          "polygon(0% 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 0% 100%)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-        <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.0 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+        <div style={{ fontSize: 23, fontWeight: 900, lineHeight: 1.0 }}>
           {typeof yards === "number" ? yards : "—"}
         </div>
-        <div style={{ fontSize: 10, fontWeight: 900, opacity: 0.9 }}>yd</div>
+        <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.9 }}>yd</div>
       </div>
     </div>
   );
@@ -272,6 +270,7 @@ export default function App() {
     return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
   }, [hole]);
 
+  // (kept if you want later, but no longer shown in play UI)
   const youToGreenYards = useMemo(() => {
     if (!hole || !pos) return null;
     return roundYards(metersToYards(haversineMeters(pos, hole.green)));
@@ -294,19 +293,16 @@ export default function App() {
 
   const overlayActionsRef = useRef(null);
 
-  // Setup Mode
+  // Setup Mode (locked behind password)
   const [setupEnabled, setSetupEnabled] = useState(false);
 
   // ========= BASELINE (FROZEN) SCALE PER HOLE =========
-  // We use teeToGreenYards (from GPS coords) as the "true" straight-line length.
-  // We map overlay normalized distances to yards using a baseline A-C length captured once per hole.
   const savedDefaults = useMemo(() => {
     return holeKey ? getHoleDefaults(holeKey) : null;
   }, [holeKey]);
 
   const [baselineAC, setBaselineAC] = useState(null);
 
-  // When hole changes, prefer saved A/C as baseline if it exists
   useEffect(() => {
     if (!holeKey) {
       setBaselineAC(null);
@@ -319,7 +315,6 @@ export default function App() {
     }
   }, [holeKey, savedDefaults]);
 
-  // If no saved baseline yet, capture from the first live overlay state we receive
   useEffect(() => {
     if (baselineAC) return;
     if (!liveOverlay?.A || !liveOverlay?.C) return;
@@ -367,8 +362,6 @@ export default function App() {
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
   // ========= Arrow Box Visibility (NO AUTO HIDE) =========
-  // If no target: show Tee->Green.
-  // If target active: show AB + BC.
   const showTargetBoxes = useMemo(() => {
     return Bactive && typeof teeToTargetYards === "number";
   }, [Bactive, teeToTargetYards]);
@@ -377,7 +370,10 @@ export default function App() {
     return !Bactive;
   }, [Bactive]);
 
+  // Layout constants
   const FOOTER_H = 60;
+  const BUTTON_H = 44;
+  const BUTTON_W = 92;
 
   const holeNumberText =
     hole?.displayHole != null ? String(hole.displayHole).padStart(2, "0") : "—";
@@ -418,30 +414,13 @@ export default function App() {
 
   function handleSaveDefaults() {
     overlayActionsRef.current?.saveDefaults?.();
-    // If we are in setup and saving, also lock baseline to the saved A/C immediately
     const st = overlayActionsRef.current?.getState?.();
     if (st?.A && st?.C) setBaselineAC({ A: st.A, C: st.C });
   }
 
-  const playTopButton = (
-    <button
-      onClick={goHome}
-      style={{
-        position: "fixed",
-        left: 10,
-        top: 10,
-        padding: "10px 12px",
-        borderRadius: 12,
-        border: "1px solid #333",
-        background: "white",
-        color: "black",
-        fontWeight: 900,
-        zIndex: 10000,
-      }}
-    >
-      HOME
-    </button>
-  );
+  function handleClearTarget() {
+    overlayActionsRef.current?.clearTarget?.();
+  }
 
   return (
     <div
@@ -450,11 +429,8 @@ export default function App() {
         color: "white",
         background: "#0b0b0b",
         minHeight: "100vh",
-        paddingBottom: page === "play" ? FOOTER_H + 24 : 24,
       }}
     >
-      {page === "play" && playTopButton}
-
       {/* HOME PAGE */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
@@ -596,104 +572,55 @@ export default function App() {
 
       {/* PLAY PAGE */}
       {page === "play" && (
-        <div style={{ display: "flex", gap: 16, padding: "8px 16px 16px 16px" }}>
-          {/* LEFT COLUMN */}
-          <div style={{ width: 200, flex: "0 0 200px" }}>
-            <div style={{ fontSize: 18, fontWeight: 900, margin: "44px 0 8px 0" }}>
-              Round Info
-            </div>
-
+        <>
+          {/* FULL SCREEN IMAGE AREA (fills everything above footer) */}
+          <div
+            style={{
+              position: "fixed",
+              left: 0,
+              top: 0,
+              right: 0,
+              bottom: FOOTER_H,
+              background: "#0b0b0b",
+              overflow: "hidden",
+            }}
+          >
+            {/* image/overlay container */}
             <div
               style={{
-                padding: 10,
-                border: "1px solid #222",
-                borderRadius: 12,
-                background: "#101010",
-                lineHeight: 1.5,
-                fontSize: 13,
-                opacity: 0.95,
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>{gpsStatus}</div>
-              <div>
-                You → Green: <strong>{youToGreenYards ?? "—"} yd</strong>
-              </div>
-              <div>
-                Tee → Green (straight): <strong>{teeToGreenYards ?? "—"} yd</strong>
-              </div>
-              <div>
-                Modeled total (A/B/C): <strong>{modeledTotalYards ?? "—"} yd</strong>
-              </div>
-              <div>
-                {parText} • {siText}
-              </div>
-            </div>
-
-            {!setupEnabled ? (
-              <button
-                onClick={enterSetup}
-                style={{
-                  marginTop: 10,
-                  width: "100%",
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #333",
-                  background: "white",
-                  color: "black",
-                  fontWeight: 900,
-                }}
-              >
-                Setup
-              </button>
-            ) : (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #1b1b1b",
-                  background: "rgba(0,0,0,0.65)",
-                  color: "white",
-                  fontWeight: 900,
-                  letterSpacing: 0.5,
-                }}
-              >
-                SETUP MODE
-              </div>
-            )}
-          </div>
-
-          {/* MAIN AREA */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                marginTop: 6,
-                height: "calc(65vh + 200px)",
-                border: "1px solid #222",
-                position: "relative",
+                position: "absolute",
+                inset: 0,
                 display: "flex",
                 justifyContent: "center",
                 alignItems: "center",
-                overflow: "hidden",
               }}
             >
               <div
                 style={{
                   position: "relative",
+                  width: "100%",
                   height: "100%",
-                  aspectRatio: `${HOLE_ASPECT_W} / ${HOLE_ASPECT_H}`,
-                  maxWidth: "100%",
                 }}
               >
-                {/* NO TARGET => Tee->Green */}
+                {/* NO TARGET => show Tee->Green number */}
                 {showGreenOnlyBox && (
-  <ArrowYardBox top={260} yards={typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards} />
-)}
-
+                  <ArrowYardBox
+                    top={260}
+                    yards={
+                      typeof modeledTotalYards === "number"
+                        ? modeledTotalYards
+                        : teeToGreenYards
+                    }
+                  />
+                )}
 
                 {/* TARGET ACTIVE => BC + AB */}
-                {showTargetBoxes && <ArrowYardBox top={180} yards={targetToGreenYards} />}
-                {showTargetBoxes && <ArrowYardBox top={450} yards={teeToTargetYards} />}
+                {showTargetBoxes && (
+                  <ArrowYardBox top={180} yards={targetToGreenYards} />
+                )}
+                {showTargetBoxes && (
+                  <ArrowYardBox top={450} yards={teeToTargetYards} />
+                )}
 
                 {imgSrc ? (
                   <HoleOverlay
@@ -712,62 +639,149 @@ export default function App() {
                     No image (check file path/name)
                   </div>
                 )}
-              </div>
-            </div>
 
-            {setupEnabled && (
-              <div
-                style={{
-                  marginTop: 10,
-                  display: "flex",
-                  gap: 10,
-                  justifyContent: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  onClick={handleSaveDefaults}
+                {/* Bottom instruction text (+20% size) */}
+                <div
                   style={{
-                    padding: "10px 14px",
-                    borderRadius: 10,
+                    position: "absolute",
+                    left: 10,
+                    right: 10,
+                    bottom: 10,
+                    display: "flex",
+                    justifyContent: "center",
+                    pointerEvents: "none",
+                    zIndex: 7,
+                  }}
+                >
+                  <div
+                    style={{
+                      background: "rgba(0,0,0,0.55)",
+                      border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 14,
+                      padding: "10px 12px",
+                      textAlign: "center",
+                      fontSize: 15, // was 12 → +20%+
+                      fontWeight: 800,
+                      lineHeight: 1.25,
+                      maxWidth: 520,
+                    }}
+                  >
+                    Tap on the green line to set target. Double tap target to
+                    remove. Drag target to Move
+                  </div>
+                </div>
+
+                {/* PLAY MODE BUTTONS (HOME left bottom, SETUP right bottom) */}
+                <button
+                  onClick={goHome}
+                  style={{
+                    position: "fixed",
+                    left: 10,
+                    bottom: FOOTER_H + 10,
+                    width: BUTTON_W,
+                    height: BUTTON_H,
+                    borderRadius: 12,
                     border: "1px solid #333",
                     background: "white",
+                    color: "black",
                     fontWeight: 900,
+                    fontSize: 18 * 1.15, // +15%
+                    zIndex: 10000,
                   }}
                 >
-                  Save Defaults
+                  HOME
                 </button>
 
                 <button
-                  onClick={() => overlayActionsRef.current?.clearTarget?.()}
+                  onClick={setupEnabled ? undefined : enterSetup}
                   style={{
-                    padding: "10px 14px",
-                    borderRadius: 10,
+                    position: "fixed",
+                    right: 10,
+                    bottom: FOOTER_H + 10,
+                    width: BUTTON_W,
+                    height: BUTTON_H,
+                    borderRadius: 12,
                     border: "1px solid #333",
                     background: "white",
+                    color: "black",
                     fontWeight: 900,
+                    fontSize: 18 * 1.15, // +15%
+                    zIndex: 10000,
+                    opacity: setupEnabled ? 0.8 : 1,
                   }}
                 >
-                  Clear Target
+                  SETUP
                 </button>
 
-                <button
-                  onClick={() => setSetupEnabled(false)}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#f3f3f3",
-                    fontWeight: 900,
-                  }}
-                >
-                  Exit Setup
-                </button>
+                {/* SETUP MODE CONTROLS (only when setupEnabled) */}
+                {setupEnabled && (
+                  <div
+                    style={{
+                      position: "fixed",
+                      left: 10,
+                      right: 10,
+                      top: 10,
+                      display: "flex",
+                      gap: 10,
+                      justifyContent: "center",
+                      flexWrap: "wrap",
+                      zIndex: 10001,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        background: "rgba(0,0,0,0.55)",
+                        fontWeight: 900,
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      SETUP MODE
+                    </div>
+
+                    <button
+                      onClick={handleSaveDefaults}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: "1px solid #333",
+                        background: "white",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Save Defaults
+                    </button>
+
+                    <button
+                      onClick={handleClearTarget}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: "1px solid #333",
+                        background: "white",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Clear Target
+                    </button>
+
+                    <button
+                      onClick={() => setSetupEnabled(false)}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        border: "1px solid #333",
+                        background: "#f3f3f3",
+                        fontWeight: 900,
+                      }}
+                    >
+                      Exit Setup
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-
-            <div style={{ marginTop: 8, opacity: 0.75, fontSize: 12 }}>
-              No auto-hide. No target shows Tee→Green. Target shows AB + BC.
             </div>
           </div>
 
@@ -778,7 +792,7 @@ export default function App() {
               left: 0,
               right: 0,
               bottom: 0,
-              height: 60,
+              height: FOOTER_H,
               background: "white",
               color: "black",
               borderTop: "1px solid #ddd",
@@ -823,10 +837,12 @@ export default function App() {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
-                <div style={{ fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
-                  Straight {teeToGreenYards ?? "—"} yd
+                {/* Remove "Straight" and increase +20% */}
+                <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
+                  {teeToGreenYards ?? "—"} yd
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 900, opacity: 0.95 }}>
+
+                <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   {parText} • {siText}
                 </div>
               </div>
@@ -850,7 +866,7 @@ export default function App() {
               {">"}
             </button>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

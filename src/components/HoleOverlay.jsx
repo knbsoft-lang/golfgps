@@ -301,7 +301,7 @@ export default function HoleOverlay({
         )}
       </svg>
 
-      {/* A: outlined square 30x30 + center dot */}
+      {/* A */}
       <Marker
         kind="A"
         norm={A}
@@ -311,7 +311,7 @@ export default function HoleOverlay({
         hitSize={HIT_A}
       />
 
-      {/* B: outlined circle 30x30 + center dot (only when active) */}
+      {/* B only when active */}
       {Bactive && (
         <Marker
           kind="B"
@@ -323,7 +323,7 @@ export default function HoleOverlay({
         />
       )}
 
-      {/* C: keep as outlined circle (smaller) */}
+      {/* C */}
       <Marker
         kind="C"
         norm={C}
@@ -339,12 +339,11 @@ export default function HoleOverlay({
 function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
   const hs = typeof hitSize === "number" ? hitSize : 44;
 
-  // Visible shapes:
   const visibleSize =
-    kind === "A" ? 30 : kind === "B" ? 30 : 18; // C smaller
+    kind === "A" ? 30 : kind === "B" ? 30 : 18;
   const dotSize = kind === "C" ? 5 : 6;
 
-  const borderRadius = kind === "A" ? 6 : 999; // square with rounded corners for A
+  const borderRadius = kind === "A" ? 6 : 999;
 
   return (
     <div
@@ -363,7 +362,6 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
       }}
       onPointerDown={pointerEnabled ? onDown : undefined}
     >
-      {/* Visible outline shape */}
       <div
         style={{
           position: "absolute",
@@ -380,7 +378,6 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
           opacity: 0.95,
         }}
       />
-      {/* Center dot */}
       <div
         style={{
           position: "absolute",
