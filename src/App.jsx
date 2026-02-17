@@ -18,7 +18,6 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
-// Distance in normalized overlay units (0..1)
 function distNorm(p1, p2) {
   const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
   const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
@@ -61,15 +60,15 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
-function ArrowYardBox({ top, yards }) {
-  // +25% size (box + fonts)
+function ArrowYardBox({ top, yards, left = 0 }) {
+  // Arrow boxes: +25% size; now offset right by 50px via `left`
   const W = 65;
 
   return (
     <div
       style={{
         position: "absolute",
-        left: 0,
+        left,
         top,
         width: W,
         padding: "7px 8px",
@@ -124,7 +123,6 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
 }
 
 export default function App() {
-  // ========= PAGE TOGGLE =========
   const [page, setPage] = useState("home"); // "home" | "play"
 
   const clubKeysAll = Object.keys(COURSE_CATALOG);
@@ -211,7 +209,6 @@ export default function App() {
 
   useEffect(() => setIdx(0), [courseType, clubKey, mode, nineA, nineB]);
 
-  // Home page: choose starting hole before PLAY
   const [startHoleDisplay, setStartHoleDisplay] = useState("1");
   useEffect(
     () => setStartHoleDisplay("1"),
@@ -264,19 +261,17 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
-  // ========= Straight-line Yardages from GPS coordinates =========
   const teeToGreenYards = useMemo(() => {
     if (!hole) return null;
     return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
   }, [hole]);
 
-  // (kept if you want later, but no longer shown in play UI)
-  const youToGreenYards = useMemo(() => {
+  // kept for future use
+  useMemo(() => {
     if (!hole || !pos) return null;
     return roundYards(metersToYards(haversineMeters(pos, hole.green)));
   }, [hole, pos]);
 
-  // ========= Par + SI =========
   const parValue =
     typeof hole?.par === "number"
       ? hole.par
@@ -287,16 +282,13 @@ export default function App() {
   const parText = `Par ${parValue}`;
   const siText = `SI ${siValue ?? "—"}`;
 
-  // ========= Overlay live state =========
   const [liveOverlay, setLiveOverlay] = useState(null);
   useEffect(() => setLiveOverlay(null), [holeKey]);
 
   const overlayActionsRef = useRef(null);
 
-  // Setup Mode (locked behind password)
   const [setupEnabled, setSetupEnabled] = useState(false);
 
-  // ========= BASELINE (FROZEN) SCALE PER HOLE =========
   const savedDefaults = useMemo(() => {
     return holeKey ? getHoleDefaults(holeKey) : null;
   }, [holeKey]);
@@ -333,7 +325,6 @@ export default function App() {
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
 
-  // Current points for modeled yardages (LIVE A/C/B)
   const A = liveOverlay?.A || baselineAC?.A || null;
   const C = liveOverlay?.C || baselineAC?.C || null;
   const Bactive = !!liveOverlay?.Bactive;
@@ -361,7 +352,6 @@ export default function App() {
     return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
-  // ========= Arrow Box Visibility (NO AUTO HIDE) =========
   const showTargetBoxes = useMemo(() => {
     return Bactive && typeof teeToTargetYards === "number";
   }, [Bactive, teeToTargetYards]);
@@ -372,8 +362,17 @@ export default function App() {
 
   // Layout constants
   const FOOTER_H = 60;
-  const BUTTON_H = 44;
-  const BUTTON_W = 92;
+
+  // Buttons moved to TOP with 40px margin
+  const TOP_BTN_TOP = 40;
+  const TOP_BTN_W = 92;
+  const TOP_BTN_H = 44;
+
+  // Arrow box offsets
+  const ARROW_LEFT = 50; // move right 50px
+  const ARROW_TOP_BC = 180 + 60; // Target->Green down 60
+  const ARROW_TOP_AB = 450 + 90; // Tee->Target down 90
+  const ARROW_TOP_AC = 260; // Tee->Green stays same (only shown when no target)
 
   const holeNumberText =
     hole?.displayHole != null ? String(hole.displayHole).padStart(2, "0") : "—";
@@ -573,7 +572,6 @@ export default function App() {
       {/* PLAY PAGE */}
       {page === "play" && (
         <>
-          {/* FULL SCREEN IMAGE AREA (fills everything above footer) */}
           <div
             style={{
               position: "fixed",
@@ -585,7 +583,6 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {/* image/overlay container */}
             <div
               style={{
                 position: "absolute",
@@ -595,17 +592,12 @@ export default function App() {
                 alignItems: "center",
               }}
             >
-              <div
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  height: "100%",
-                }}
-              >
-                {/* NO TARGET => show Tee->Green number */}
+              <div style={{ position: "relative", width: "100%", height: "100%" }}>
+                {/* NO TARGET => Tee->Green number */}
                 {showGreenOnlyBox && (
                   <ArrowYardBox
-                    top={260}
+                    left={ARROW_LEFT}
+                    top={ARROW_TOP_AC}
                     yards={
                       typeof modeledTotalYards === "number"
                         ? modeledTotalYards
@@ -616,10 +608,10 @@ export default function App() {
 
                 {/* TARGET ACTIVE => BC + AB */}
                 {showTargetBoxes && (
-                  <ArrowYardBox top={180} yards={targetToGreenYards} />
+                  <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_BC} yards={targetToGreenYards} />
                 )}
                 {showTargetBoxes && (
-                  <ArrowYardBox top={450} yards={teeToTargetYards} />
+                  <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
                 )}
 
                 {imgSrc ? (
@@ -640,13 +632,13 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Bottom instruction text (+20% size) */}
+                {/* Instruction label: wider, +10% font, closer to footer */}
                 <div
                   style={{
                     position: "absolute",
                     left: 10,
                     right: 10,
-                    bottom: 10,
+                    bottom: 6, // closer to footer
                     display: "flex",
                     justifyContent: "center",
                     pointerEvents: "none",
@@ -660,10 +652,13 @@ export default function App() {
                       borderRadius: 14,
                       padding: "10px 12px",
                       textAlign: "center",
-                      fontSize: 15, // was 12 → +20%+
+                      fontSize: 16.5, // was 15 -> +10%
                       fontWeight: 800,
-                      lineHeight: 1.25,
-                      maxWidth: 520,
+                      lineHeight: 1.2,
+                      maxWidth: 900, // wider so it stays on one line
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                     }}
                   >
                     Tap on the green line to set target. Double tap target to
@@ -671,21 +666,21 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* PLAY MODE BUTTONS (HOME left bottom, SETUP right bottom) */}
+                {/* HOME + SETUP moved to TOP with 40px gap */}
                 <button
                   onClick={goHome}
                   style={{
                     position: "fixed",
                     left: 10,
-                    bottom: FOOTER_H + 10,
-                    width: BUTTON_W,
-                    height: BUTTON_H,
+                    top: TOP_BTN_TOP,
+                    width: TOP_BTN_W,
+                    height: TOP_BTN_H,
                     borderRadius: 12,
                     border: "1px solid #333",
                     background: "white",
                     color: "black",
                     fontWeight: 900,
-                    fontSize: 18 * 1.15, // +15%
+                    fontSize: 18 * 1.15,
                     zIndex: 10000,
                   }}
                 >
@@ -697,15 +692,15 @@ export default function App() {
                   style={{
                     position: "fixed",
                     right: 10,
-                    bottom: FOOTER_H + 10,
-                    width: BUTTON_W,
-                    height: BUTTON_H,
+                    top: TOP_BTN_TOP,
+                    width: TOP_BTN_W,
+                    height: TOP_BTN_H,
                     borderRadius: 12,
                     border: "1px solid #333",
                     background: "white",
                     color: "black",
                     fontWeight: 900,
-                    fontSize: 18 * 1.15, // +15%
+                    fontSize: 18 * 1.15,
                     zIndex: 10000,
                     opacity: setupEnabled ? 0.8 : 1,
                   }}
@@ -713,7 +708,7 @@ export default function App() {
                   SETUP
                 </button>
 
-                {/* SETUP MODE CONTROLS (only when setupEnabled) */}
+                {/* SETUP MODE CONTROLS: move right, smaller buttons/fonts */}
                 {setupEnabled && (
                   <div
                     style={{
@@ -723,19 +718,20 @@ export default function App() {
                       top: 10,
                       display: "flex",
                       gap: 10,
-                      justifyContent: "center",
+                      justifyContent: "flex-end", // push to the right
                       flexWrap: "wrap",
                       zIndex: 10001,
                     }}
                   >
                     <div
                       style={{
-                        padding: "8px 12px",
+                        padding: "6px 10px",
                         borderRadius: 12,
                         border: "1px solid rgba(255,255,255,0.18)",
                         background: "rgba(0,0,0,0.55)",
                         fontWeight: 900,
                         letterSpacing: 0.5,
+                        fontSize: 13, // ~20% smaller
                       }}
                     >
                       SETUP MODE
@@ -744,11 +740,12 @@ export default function App() {
                     <button
                       onClick={handleSaveDefaults}
                       style={{
-                        padding: "10px 14px",
+                        padding: "8px 10px",
                         borderRadius: 10,
                         border: "1px solid #333",
                         background: "white",
                         fontWeight: 900,
+                        fontSize: 13, // ~20% smaller
                       }}
                     >
                       Save Defaults
@@ -757,11 +754,12 @@ export default function App() {
                     <button
                       onClick={handleClearTarget}
                       style={{
-                        padding: "10px 14px",
+                        padding: "8px 10px",
                         borderRadius: 10,
                         border: "1px solid #333",
                         background: "white",
                         fontWeight: 900,
+                        fontSize: 13, // ~20% smaller
                       }}
                     >
                       Clear Target
@@ -770,11 +768,12 @@ export default function App() {
                     <button
                       onClick={() => setSetupEnabled(false)}
                       style={{
-                        padding: "10px 14px",
+                        padding: "8px 10px",
                         borderRadius: 10,
                         border: "1px solid #333",
                         background: "#f3f3f3",
                         fontWeight: 900,
+                        fontSize: 13, // ~20% smaller
                       }}
                     >
                       Exit Setup
@@ -837,7 +836,6 @@ export default function App() {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
-                {/* Remove "Straight" and increase +20% */}
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   {teeToGreenYards ?? "—"} yd
                 </div>
