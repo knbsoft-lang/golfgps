@@ -368,7 +368,7 @@ export default function App() {
   const TOP_BTN_H = 44;
 
   // Arrow boxes: move right 50px
-  const ARROW_LEFT = 50;
+  const ARROW_LEFT = 100;
   const ARROW_TOP_BC = 240; // (was 180 + 60)
   const ARROW_TOP_AB = 540; // (was 450 + 90)
   const ARROW_TOP_AC = 260;
