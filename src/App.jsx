@@ -18,6 +18,7 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
+// Distance in normalized overlay units (0..1)
 function distNorm(p1, p2) {
   const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
   const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
@@ -60,9 +61,9 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
+// HIGH-CONTRAST arrow yard box
 function ArrowYardBox({ top, yards, left = 0 }) {
-  // Arrow boxes: positioned 50px right (left passed in)
-  const W = 65;
+  const W = 70;
 
   return (
     <div
@@ -71,23 +72,28 @@ function ArrowYardBox({ top, yards, left = 0 }) {
         left,
         top,
         width: W,
-        padding: "7px 8px",
-        background: "rgba(255,255,255,0.95)",
+        padding: "8px 9px",
+        background: "rgba(255,255,255,0.98)",
         color: "#000",
-        border: "1px solid #000",
-        borderRadius: "0 12px 12px 0",
-        boxShadow: "0 3px 10px rgba(0,0,0,0.22)",
+        border: "2px solid #000",
+
+        // Halo outline for busy backgrounds (houses/trees)
+        outline: "3px solid rgba(0,0,0,0.60)",
+        outlineOffset: 1,
+
+        borderRadius: "0 14px 14px 0",
+        boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
         pointerEvents: "none",
         zIndex: 6,
         clipPath:
-          "polygon(0% 0%, calc(100% - 12px) 0%, 100% 50%, calc(100% - 12px) 100%, 0% 100%)",
+          "polygon(0% 0%, calc(100% - 14px) 0%, 100% 50%, calc(100% - 14px) 100%, 0% 100%)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-        <div style={{ fontSize: 23, fontWeight: 900, lineHeight: 1.0 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+        <div style={{ fontSize: 24, fontWeight: 950, lineHeight: 1.0 }}>
           {typeof yards === "number" ? yards : "—"}
         </div>
-        <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.9 }}>yd</div>
+        <div style={{ fontSize: 13, fontWeight: 900, opacity: 0.95 }}>yd</div>
       </div>
     </div>
   );
@@ -210,20 +216,15 @@ export default function App() {
   useEffect(() => setIdx(0), [courseType, clubKey, mode, nineA, nineB]);
 
   const [startHoleDisplay, setStartHoleDisplay] = useState("1");
-  useEffect(
-    () => setStartHoleDisplay("1"),
-    [courseType, clubKey, mode, nineA, nineB]
-  );
+  useEffect(() => setStartHoleDisplay("1"), [courseType, clubKey, mode, nineA, nineB]);
 
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
 
+  // IMPORTANT: keep this template literal on ONE LINE (prevents paste issues)
   const holeKey =
     hole && clubKey
-      ? `${clubKey.replace(/\s+/g, "")}-${hole.nine}-${String(hole.hole).padStart(
-          2,
-          "0"
-        )}`
+      ? `${clubKey.replace(/\s+/g, "")}-${hole.nine}-${String(hole.hole).padStart(2, "0")}`
       : "";
 
   // ========= GPS =========
@@ -261,16 +262,13 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
+  // Straight-line tee->green
   const teeToGreenYards = useMemo(() => {
     if (!hole) return null;
     return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
   }, [hole]);
 
-  useMemo(() => {
-    if (!hole || !pos) return null;
-    return roundYards(metersToYards(haversineMeters(pos, hole.green)));
-  }, [hole, pos]);
-
+  // ========= Par + SI =========
   const parValue =
     typeof hole?.par === "number"
       ? hole.par
@@ -281,13 +279,15 @@ export default function App() {
   const parText = `Par ${parValue}`;
   const siText = `SI ${siValue ?? "—"}`;
 
+  // ========= Overlay live state =========
   const [liveOverlay, setLiveOverlay] = useState(null);
   useEffect(() => setLiveOverlay(null), [holeKey]);
-
   const overlayActionsRef = useRef(null);
 
+  // Setup Mode
   const [setupEnabled, setSetupEnabled] = useState(false);
 
+  // ========= BASELINE (FROZEN) SCALE PER HOLE =========
   const savedDefaults = useMemo(() => {
     return holeKey ? getHoleDefaults(holeKey) : null;
   }, [holeKey]);
@@ -367,10 +367,10 @@ export default function App() {
   const TOP_BTN_W = 92;
   const TOP_BTN_H = 44;
 
-  // Arrow boxes: move right 50px
-  const ARROW_LEFT = 90;
-  const ARROW_TOP_BC = 240; // (was 180 + 60)
-  const ARROW_TOP_AB = 540; // (was 450 + 90)
+  // Arrow boxes position (YOU WANTED 80)
+  const ARROW_LEFT = 80;
+  const ARROW_TOP_BC = 240;
+  const ARROW_TOP_AB = 540;
   const ARROW_TOP_AC = 260;
 
   const holeNumberText =
@@ -564,27 +564,6 @@ export default function App() {
             >
               PLAY
             </button>
-
-            {/* Moved label to HOME page under PLAY */}
-            <div
-              style={{
-                marginTop: 10,
-                background: "rgba(0,0,0,0.55)",
-                border: "1px solid rgba(255,255,255,0.18)",
-                borderRadius: 14,
-                padding: "10px 12px",
-                textAlign: "center",
-                fontSize: 16,
-                fontWeight: 800,
-                lineHeight: 1.2,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              Tap on the green line to set target. Double tap target to remove.
-              Drag target to Move
-            </div>
           </div>
         </div>
       )}
@@ -603,187 +582,157 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            <div
+            {/* Arrow boxes */}
+            {showGreenOnlyBox && (
+              <ArrowYardBox
+                left={ARROW_LEFT}
+                top={ARROW_TOP_AC}
+                yards={typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards}
+              />
+            )}
+            {showTargetBoxes && (
+              <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_BC} yards={targetToGreenYards} />
+            )}
+            {showTargetBoxes && (
+              <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
+            )}
+
+            {/* Overlay */}
+            {imgSrc ? (
+              <HoleOverlay
+                imageSrc={imgSrc}
+                resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}`}
+                holeKey={holeKey}
+                setupEnabled={setupEnabled}
+                allowPlayB={true}
+                onStateChange={(state) => setLiveOverlay(state)}
+                onActionsReady={(actions) => {
+                  overlayActionsRef.current = actions;
+                }}
+              />
+            ) : (
+              <div style={{ padding: 12, color: "white" }}>No image</div>
+            )}
+
+            {/* HOME + SETUP */}
+            <button
+              onClick={goHome}
               style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
+                position: "fixed",
+                left: 10,
+                top: TOP_BTN_TOP,
+                width: TOP_BTN_W,
+                height: TOP_BTN_H,
+                borderRadius: 12,
+                border: "1px solid #333",
+                background: "white",
+                color: "black",
+                fontWeight: 900,
+                fontSize: 18 * 1.15,
+                zIndex: 10000,
               }}
             >
-              <div style={{ position: "relative", width: "100%", height: "100%" }}>
-                {/* NO TARGET => Tee->Green number */}
-                {showGreenOnlyBox && (
-                  <ArrowYardBox
-                    left={ARROW_LEFT}
-                    top={ARROW_TOP_AC}
-                    yards={
-                      typeof modeledTotalYards === "number"
-                        ? modeledTotalYards
-                        : teeToGreenYards
-                    }
-                  />
-                )}
+              HOME
+            </button>
 
-                {/* TARGET ACTIVE => BC + AB */}
-                {showTargetBoxes && (
-                  <ArrowYardBox
-                    left={ARROW_LEFT}
-                    top={ARROW_TOP_BC}
-                    yards={targetToGreenYards}
-                  />
-                )}
-                {showTargetBoxes && (
-                  <ArrowYardBox
-                    left={ARROW_LEFT}
-                    top={ARROW_TOP_AB}
-                    yards={teeToTargetYards}
-                  />
-                )}
+            <button
+              onClick={setupEnabled ? undefined : enterSetup}
+              style={{
+                position: "fixed",
+                right: 10,
+                top: TOP_BTN_TOP,
+                width: TOP_BTN_W,
+                height: TOP_BTN_H,
+                borderRadius: 12,
+                border: "1px solid #333",
+                background: "white",
+                color: "black",
+                fontWeight: 900,
+                fontSize: 18 * 1.15,
+                zIndex: 10000,
+                opacity: setupEnabled ? 0.8 : 1,
+              }}
+            >
+              SETUP
+            </button>
 
-                {imgSrc ? (
-                  <HoleOverlay
-                    imageSrc={imgSrc}
-                    resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}`}
-                    holeKey={holeKey}
-                    setupEnabled={setupEnabled}
-                    allowPlayB={true}
-                    onStateChange={(state) => setLiveOverlay(state)}
-                    onActionsReady={(actions) => {
-                      overlayActionsRef.current = actions;
-                    }}
-                  />
-                ) : (
-                  <div style={{ padding: 12, color: "white" }}>
-                    No image (check file path/name)
-                  </div>
-                )}
-
-                {/* HOME + SETUP buttons (top) */}
-                <button
-                  onClick={goHome}
+            {/* Setup controls */}
+            {setupEnabled && (
+              <div
+                style={{
+                  position: "fixed",
+                  left: 10,
+                  right: 10,
+                  top: 10,
+                  display: "flex",
+                  gap: 10,
+                  justifyContent: "flex-end",
+                  flexWrap: "wrap",
+                  zIndex: 10001,
+                  pointerEvents: "none",
+                }}
+              >
+                <div
                   style={{
-                    position: "fixed",
-                    left: 10,
-                    top: TOP_BTN_TOP,
-                    width: TOP_BTN_W,
-                    height: TOP_BTN_H,
+                    padding: "6px 10px",
                     borderRadius: 12,
-                    border: "1px solid #333",
-                    background: "white",
-                    color: "black",
+                    border: "1px solid rgba(255,255,255,0.18)",
+                    background: "rgba(0,0,0,0.55)",
                     fontWeight: 900,
-                    fontSize: 18 * 1.15,
-                    zIndex: 10000,
+                    letterSpacing: 0.5,
+                    fontSize: 13,
+                    pointerEvents: "auto",
                   }}
                 >
-                  HOME
+                  SETUP MODE
+                </div>
+
+                <button
+                  onClick={handleSaveDefaults}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 13,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  Save Defaults
                 </button>
 
                 <button
-                  onClick={setupEnabled ? undefined : enterSetup}
+                  onClick={handleClearTarget}
                   style={{
-                    position: "fixed",
-                    right: 10,
-                    top: TOP_BTN_TOP,
-                    width: TOP_BTN_W,
-                    height: TOP_BTN_H,
-                    borderRadius: 12,
+                    padding: "8px 10px",
+                    borderRadius: 10,
                     border: "1px solid #333",
                     background: "white",
-                    color: "black",
                     fontWeight: 900,
-                    fontSize: 18 * 1.15,
-                    zIndex: 10000,
-                    opacity: setupEnabled ? 0.8 : 1,
+                    fontSize: 13,
+                    pointerEvents: "auto",
                   }}
                 >
-                  SETUP
+                  Clear Target
                 </button>
 
-                {/* SETUP MODE CONTROLS
-                    IMPORTANT FIX: wrapper ignores touch so you can drag C underneath
-                    Only the buttons/label accept touch.
-                */}
-                {setupEnabled && (
-                  <div
-                    style={{
-                      position: "fixed",
-                      left: 10,
-                      right: 10,
-                      top: 10,
-                      display: "flex",
-                      gap: 10,
-                      justifyContent: "flex-end",
-                      flexWrap: "wrap",
-                      zIndex: 10001,
-                      pointerEvents: "none", // <-- key fix
-                    }}
-                  >
-                    <div
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.18)",
-                        background: "rgba(0,0,0,0.55)",
-                        fontWeight: 900,
-                        letterSpacing: 0.5,
-                        fontSize: 13,
-                        pointerEvents: "auto", // clickable
-                      }}
-                    >
-                      SETUP MODE
-                    </div>
-
-                    <button
-                      onClick={handleSaveDefaults}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #333",
-                        background: "white",
-                        fontWeight: 900,
-                        fontSize: 13,
-                        pointerEvents: "auto", // clickable
-                      }}
-                    >
-                      Save Defaults
-                    </button>
-
-                    <button
-                      onClick={handleClearTarget}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #333",
-                        background: "white",
-                        fontWeight: 900,
-                        fontSize: 13,
-                        pointerEvents: "auto", // clickable
-                      }}
-                    >
-                      Clear Target
-                    </button>
-
-                    <button
-                      onClick={() => setSetupEnabled(false)}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: "1px solid #333",
-                        background: "#f3f3f3",
-                        fontWeight: 900,
-                        fontSize: 13,
-                        pointerEvents: "auto", // clickable
-                      }}
-                    >
-                      Exit Setup
-                    </button>
-                  </div>
-                )}
+                <button
+                  onClick={() => setSetupEnabled(false)}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#f3f3f3",
+                    fontWeight: 900,
+                    fontSize: 13,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  Exit Setup
+                </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -841,7 +790,6 @@ export default function App() {
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   {teeToGreenYards ?? "—"} yd
                 </div>
-
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   {parText} • {siText}
                 </div>
