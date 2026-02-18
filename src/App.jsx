@@ -370,7 +370,7 @@ export default function App() {
   // Arrow boxes position (YOU WANTED 80)
   const ARROW_LEFT = 80;
   const ARROW_TOP_BC = 240;
-  const ARROW_TOP_AB = 540;
+  const ARROW_TOP_AB = 640;
   const ARROW_TOP_AC = 260;
 
   const holeNumberText =
