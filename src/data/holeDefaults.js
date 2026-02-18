@@ -43,3 +43,64 @@ export function setHoleDefaults(holeKey, data) {
 
   writeAll(all);
 }
+
+/** Export ALL defaults (every hole) as a JSON string you can copy/paste */
+export function exportAllDefaults() {
+  const all = readAll();
+  return JSON.stringify(
+    {
+      version: 1,
+      storageKey: STORAGE_KEY,
+      savedAt: new Date().toISOString(),
+      holes: all,
+    },
+    null,
+    2
+  );
+}
+
+/** Import defaults from JSON string (overwrites existing keys with imported ones) */
+export function importAllDefaults(jsonString) {
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch {
+    return { ok: false, error: "Invalid JSON (could not parse)" };
+  }
+
+  const holes = parsed?.holes;
+  if (!holes || typeof holes !== "object") {
+    return { ok: false, error: "JSON missing 'holes' object" };
+  }
+
+  const current = readAll();
+  const merged = { ...current };
+
+  let count = 0;
+
+  for (const [holeKey, data] of Object.entries(holes)) {
+    if (!holeKey) continue;
+    if (!data || typeof data !== "object") continue;
+
+    merged[holeKey] = {
+      A: data?.A ? { x: clamp01(data.A.x), y: clamp01(data.A.y) } : undefined,
+      C: data?.C ? { x: clamp01(data.C.x), y: clamp01(data.C.y) } : undefined,
+      B: data?.B ? { x: clamp01(data.B.x), y: clamp01(data.B.y) } : undefined,
+      Bactive: !!data?.Bactive,
+    };
+    count++;
+  }
+
+  writeAll(merged);
+  return { ok: true, imported: count };
+}
+
+/** (Optional) Clear everything */
+export function clearAllDefaults() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
