@@ -18,7 +18,6 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
-// Distance in normalized overlay units (0..1)
 function distNorm(p1, p2) {
   const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
   const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
@@ -61,7 +60,6 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
-// HIGH-CONTRAST arrow yard box (already working for you)
 function ArrowYardBox({ top, yards, left = 0 }) {
   const W = 70;
 
@@ -125,13 +123,14 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
   );
 }
 
-// --- Phase 3 math: progress along Tee->Green (GPS) then map to A->C (overlay) ---
+// Progress along tee->green (GPS) then map to A->C (overlay).
+// NOTE: This is 1D (along the line). True pinpoint 2D needs calibration (Phase 3b).
 function projectAlongTeeGreen(tee, green, pos) {
   if (!tee || !green || !pos) return null;
 
-  // Equirectangular projection around tee (good enough for a golf hole)
   const R = 6371000;
   const lat0 = (tee.lat * Math.PI) / 180;
+
   const toXY = (p) => {
     const lat = (p.lat * Math.PI) / 180;
     const lon = (p.lon * Math.PI) / 180;
@@ -142,12 +141,11 @@ function projectAlongTeeGreen(tee, green, pos) {
     };
   };
 
-  const T = { x: 0, y: 0 };
   const G = toXY(green);
   const P = toXY(pos);
 
-  const vx = G.x - T.x;
-  const vy = G.y - T.y;
+  const vx = G.x;
+  const vy = G.y;
   const denom = vx * vx + vy * vy;
   if (denom < 0.0001) return 0;
 
@@ -256,11 +254,25 @@ export default function App() {
       ? `${clubKey.replace(/\s+/g, "")}-${hole.nine}-${String(hole.hole).padStart(2, "0")}`
       : "";
 
-  // ========= GPS (Phase 3 upgrade: watch + poll fallback) =========
+  // ========= GPS (debug counters) =========
   const [pos, setPos] = useState(null);
   const [gpsStatus, setGpsStatus] = useState("GPS not started");
   const watchIdRef = useRef(null);
   const pollTimerRef = useRef(null);
+
+  const [fixCount, setFixCount] = useState(0);
+  const [lastFixMs, setLastFixMs] = useState(0);
+
+  function applyFix(p) {
+    setPos({
+      lat: p.coords.latitude,
+      lon: p.coords.longitude,
+      accuracyMeters: p.coords.accuracy,
+    });
+    setGpsStatus(`GPS locked (${Math.round(p.coords.accuracy)}m)`);
+    setFixCount((c) => c + 1);
+    setLastFixMs(Date.now());
+  }
 
   useEffect(() => {
     if (!("geolocation" in navigator)) {
@@ -270,31 +282,15 @@ export default function App() {
 
     const opts = { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 };
 
-    // 1) Continuous watch
     watchIdRef.current = navigator.geolocation.watchPosition(
-      (p) => {
-        setPos({
-          lat: p.coords.latitude,
-          lon: p.coords.longitude,
-          accuracyMeters: p.coords.accuracy,
-        });
-        setGpsStatus(`GPS locked (${Math.round(p.coords.accuracy)}m)`);
-      },
+      (p) => applyFix(p),
       (err) => setGpsStatus(`GPS error: ${err.message}`),
       opts
     );
 
-    // 2) Poll fallback every 1s to prevent Android throttling in PWA
     pollTimerRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(
-        (p) => {
-          setPos({
-            lat: p.coords.latitude,
-            lon: p.coords.longitude,
-            accuracyMeters: p.coords.accuracy,
-          });
-          setGpsStatus(`GPS locked (${Math.round(p.coords.accuracy)}m)`);
-        },
+        (p) => applyFix(p),
         () => {},
         opts
       );
@@ -305,6 +301,7 @@ export default function App() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const prevHole = () =>
@@ -312,39 +309,39 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
-  // Straight-line tee->green yardage (from hole coords)
   const teeToGreenYards = useMemo(() => {
     if (!hole) return null;
     return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
   }, [hole]);
 
-  // You->Green yardage (this SHOULD now update while moving)
   const youToGreenYards = useMemo(() => {
     if (!hole || !pos) return null;
     return roundYards(metersToYards(haversineMeters(pos, hole.green)));
   }, [hole, pos]);
 
-  // ========= Par + SI =========
+  // Distance from your current pos to this hole (closest of tee/green)
+  const youToHoleYards = useMemo(() => {
+    if (!hole || !pos) return null;
+    const ydT = roundYards(metersToYards(haversineMeters(pos, hole.tee)));
+    const ydG = roundYards(metersToYards(haversineMeters(pos, hole.green)));
+    return Math.min(ydT, ydG);
+  }, [hole, pos]);
+
   const parValue =
     typeof hole?.par === "number"
       ? hole.par
       : defaultParForHole(hole?.displayHole || hole?.hole || 1);
 
   const siValue = typeof hole?.hcp === "number" ? hole.hcp : null;
-
   const parText = `Par ${parValue}`;
   const siText = `SI ${siValue ?? "—"}`;
 
-  // ========= Overlay live state =========
   const [liveOverlay, setLiveOverlay] = useState(null);
   useEffect(() => setLiveOverlay(null), [holeKey]);
 
   const overlayActionsRef = useRef(null);
-
-  // Setup Mode
   const [setupEnabled, setSetupEnabled] = useState(false);
 
-  // ========= BASELINE (FROZEN) SCALE PER HOLE =========
   const savedDefaults = useMemo(() => {
     return holeKey ? getHoleDefaults(holeKey) : null;
   }, [holeKey]);
@@ -381,7 +378,6 @@ export default function App() {
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
 
-  // Current points for modeled yardages (LIVE A/C/B)
   const A = liveOverlay?.A || baselineAC?.A || null;
   const C = liveOverlay?.C || baselineAC?.C || null;
   const Bactive = !!liveOverlay?.Bactive;
@@ -409,10 +405,16 @@ export default function App() {
     return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
-  // ========= LIVE YOU DOT (projected along tee->green, mapped to A->C) =========
+  // ✅ Only show YOU dot if you're actually near the hole
+  // If you're at your house, we hide the dot instead of clamping it to tee/green.
+  const YOU_SHOW_WITHIN_YARDS = 1200;
+
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
+    if (typeof youToHoleYards === "number" && youToHoleYards > YOU_SHOW_WITHIN_YARDS) {
+      return null;
+    }
 
     const t = projectAlongTeeGreen(hole.tee, hole.green, pos);
     if (typeof t !== "number") return null;
@@ -421,9 +423,8 @@ export default function App() {
       x: A.x + (C.x - A.x) * t,
       y: A.y + (C.y - A.y) * t,
     };
-  }, [hole, pos, A, C]);
+  }, [hole, pos, A, C, youToHoleYards]);
 
-  // ========= Arrow Box Visibility =========
   const showTargetBoxes = useMemo(() => {
     return Bactive && typeof teeToTargetYards === "number";
   }, [Bactive, teeToTargetYards]);
@@ -432,18 +433,15 @@ export default function App() {
     return !Bactive;
   }, [Bactive]);
 
-  // Layout constants
   const FOOTER_H = 60;
 
-  // Top buttons
   const TOP_BTN_TOP = 40;
   const TOP_BTN_W = 92;
   const TOP_BTN_H = 44;
 
-  // Arrow boxes position
   const ARROW_LEFT = 80;
   const ARROW_TOP_BC = 240;
-  const ARROW_TOP_AB = 640; // your last change: AB down 100px
+  const ARROW_TOP_AB = 640;
   const ARROW_TOP_AC = 260;
 
   const holeNumberText =
@@ -493,6 +491,9 @@ export default function App() {
     overlayActionsRef.current?.clearTarget?.();
   }
 
+  const fixAgeSec =
+    lastFixMs > 0 ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000)) : null;
+
   return (
     <div
       style={{
@@ -503,7 +504,7 @@ export default function App() {
         paddingBottom: page === "play" ? FOOTER_H + 24 : 24,
       }}
     >
-      {/* HOME PAGE */}
+      {/* HOME */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
           <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>
@@ -642,7 +643,7 @@ export default function App() {
         </div>
       )}
 
-      {/* PLAY PAGE */}
+      {/* PLAY */}
       {page === "play" && (
         <>
           <div
@@ -671,7 +672,7 @@ export default function App() {
               <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
             )}
 
-            {/* Overlay (now receives youNorm) */}
+            {/* Overlay */}
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -688,6 +689,31 @@ export default function App() {
             ) : (
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
+
+            {/* GPS DEBUG BOX (so we KNOW if fixes are updating) */}
+            <div
+              style={{
+                position: "fixed",
+                left: 10,
+                bottom: FOOTER_H + 10,
+                padding: "8px 10px",
+                borderRadius: 12,
+                border: "2px solid rgba(255,255,255,0.25)",
+                background: "rgba(0,0,0,0.55)",
+                fontSize: 12,
+                lineHeight: 1.25,
+                zIndex: 10002,
+                pointerEvents: "none",
+                minWidth: 210,
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS DEBUG</div>
+              <div>Fixes: <b>{fixCount}</b> {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}</div>
+              <div>Acc: <b>{pos?.accuracyMeters != null ? `${Math.round(pos.accuracyMeters)}m` : "—"}</b></div>
+              <div>Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b></div>
+              <div>Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b></div>
+              <div>Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b></div>
+            </div>
 
             {/* HOME + SETUP */}
             <button
@@ -731,7 +757,6 @@ export default function App() {
               SETUP
             </button>
 
-            {/* Setup controls */}
             {setupEnabled && (
               <div
                 style={{
