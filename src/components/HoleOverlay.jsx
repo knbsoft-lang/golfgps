@@ -43,12 +43,21 @@ function closestPointOnSegment(P, A, B) {
 }
 
 // Map accuracy meters to a "visual ring radius" in pixels.
-// (We don't have true meters-per-pixel without full calibration, so this is a helpful visual scale.)
+// We scale it down ~65% by multiplying by 0.35.
 function ringPxFromAccuracy(accuracyMeters) {
-  if (typeof accuracyMeters !== "number" || !isFinite(accuracyMeters)) return 18;
+  if (typeof accuracyMeters !== "number" || !isFinite(accuracyMeters)) return 10;
+
   const m = Math.max(1, Math.min(30, accuracyMeters)); // clamp 1..30m
+
+  // Original visual scale:
   // 1m => ~10px, 30m => ~60px
-  return 8 + (m - 1) * (52 / 29);
+  const base = 8 + (m - 1) * (52 / 29);
+
+  // Make it ~65% smaller:
+  const scaled = base * 0.35;
+
+  // Keep a sensible minimum so you can still see it
+  return Math.max(6, scaled);
 }
 
 export default function HoleOverlay({
@@ -61,7 +70,6 @@ export default function HoleOverlay({
   setupEnabled = false,
   allowPlayB = true,
 
-  // ✅ Phase 3: live you dot along A->C line (norm coords)
   youNorm = null,
   youAccuracyMeters = null,
 
@@ -71,7 +79,6 @@ export default function HoleOverlay({
   const containerRef = useRef(null);
   const [rect, setRect] = useState(null);
 
-  // Double-tap detection on B
   const lastBTapMsRef = useRef(0);
 
   useEffect(() => {
@@ -104,7 +111,6 @@ export default function HoleOverlay({
 
   const [dragging, setDragging] = useState(null);
 
-  // Load defaults on hole change (includes B)
   useEffect(() => {
     const saved = holeKey ? getHoleDefaults(holeKey) : null;
 
@@ -252,14 +258,11 @@ export default function HoleOverlay({
 
   const lineClickable = setupEnabled || allowPlayB;
 
-  // =========================
-  // ✅ YOU DOT SMOOTHING (EMA-style via animation)
-  // =========================
+  // ✅ YOU DOT SMOOTHING
   const [youSmooth, setYouSmooth] = useState(null);
   const animRef = useRef({ raf: 0, from: null, to: null, t0: 0 });
 
   useEffect(() => {
-    // If no youNorm, fade it out
     if (!youNorm || typeof youNorm.x !== "number" || typeof youNorm.y !== "number") {
       if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
       animRef.current = { raf: 0, from: null, to: null, t0: 0 };
@@ -280,7 +283,6 @@ export default function HoleOverlay({
 
     const step = (now) => {
       const t = Math.max(0, Math.min(1, (now - animRef.current.t0) / DURATION_MS));
-      // easeOutCubic
       const e = 1 - Math.pow(1 - t, 3);
 
       const x = animRef.current.from.x + (animRef.current.to.x - animRef.current.from.x) * e;
@@ -361,7 +363,7 @@ export default function HoleOverlay({
         )}
       </svg>
 
-      {/* ✅ YOU DOT + ACCURACY RING (pointerEvents none so it never blocks dragging) */}
+      {/* YOU DOT + SMALLER ACCURACY RING */}
       {youSmooth && (
         <div
           style={{
@@ -373,7 +375,6 @@ export default function HoleOverlay({
             pointerEvents: "none",
           }}
         >
-          {/* Ring */}
           <div
             style={{
               position: "absolute",
@@ -388,7 +389,6 @@ export default function HoleOverlay({
               boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
             }}
           />
-          {/* Dot */}
           <div
             style={{
               position: "absolute",
@@ -406,7 +406,6 @@ export default function HoleOverlay({
         </div>
       )}
 
-      {/* A */}
       <Marker
         kind="A"
         norm={A}
@@ -416,7 +415,6 @@ export default function HoleOverlay({
         hitSize={HIT_A}
       />
 
-      {/* B only when active */}
       {Bactive && (
         <Marker
           kind="B"
@@ -428,7 +426,6 @@ export default function HoleOverlay({
         />
       )}
 
-      {/* C */}
       <Marker
         kind="C"
         norm={C}
