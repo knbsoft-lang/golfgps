@@ -42,6 +42,15 @@ function closestPointOnSegment(P, A, B) {
   return { x: A.x + t * ABx, y: A.y + t * ABy };
 }
 
+// Map accuracy meters to a "visual ring radius" in pixels.
+// (We don't have true meters-per-pixel without full calibration, so this is a helpful visual scale.)
+function ringPxFromAccuracy(accuracyMeters) {
+  if (typeof accuracyMeters !== "number" || !isFinite(accuracyMeters)) return 18;
+  const m = Math.max(1, Math.min(30, accuracyMeters)); // clamp 1..30m
+  // 1m => ~10px, 30m => ~60px
+  return 8 + (m - 1) * (52 / 29);
+}
+
 export default function HoleOverlay({
   imageSrc,
   resetKey,
@@ -52,8 +61,9 @@ export default function HoleOverlay({
   setupEnabled = false,
   allowPlayB = true,
 
-  // ✅ NEW: live you dot position in normalized overlay coords (0..1)
+  // ✅ Phase 3: live you dot along A->C line (norm coords)
   youNorm = null,
+  youAccuracyMeters = null,
 
   onStateChange,
   onActionsReady,
@@ -61,6 +71,7 @@ export default function HoleOverlay({
   const containerRef = useRef(null);
   const [rect, setRect] = useState(null);
 
+  // Double-tap detection on B
   const lastBTapMsRef = useRef(0);
 
   useEffect(() => {
@@ -93,6 +104,7 @@ export default function HoleOverlay({
 
   const [dragging, setDragging] = useState(null);
 
+  // Load defaults on hole change (includes B)
   useEffect(() => {
     const saved = holeKey ? getHoleDefaults(holeKey) : null;
 
@@ -112,6 +124,7 @@ export default function HoleOverlay({
 
     setBactive(!!saved?.Bactive);
     setDragging(null);
+
     lastBTapMsRef.current = 0;
   }, [resetKey, holeKey, fallbackA, fallbackC]);
 
@@ -130,7 +143,11 @@ export default function HoleOverlay({
 
   useEffect(() => {
     if (!onActionsReady) return;
-    onActionsReady({ saveDefaults, clearTarget, getState });
+    onActionsReady({
+      saveDefaults,
+      clearTarget,
+      getState,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onActionsReady, holeKey, A, C, Bpos, Bactive]);
 
@@ -192,10 +209,12 @@ export default function HoleOverlay({
       setA({ x: p.x, y: p.y });
       return;
     }
+
     if (dragging === "C") {
       setC({ x: p.x, y: p.y });
       return;
     }
+
     if (dragging === "B") {
       if (!Bactive) return;
       if (!canDrag("B")) return;
@@ -231,10 +250,61 @@ export default function HoleOverlay({
   const Cpx = rect ? pxFromNorm(C, rect) : { x: 0, y: 0 };
   const Bpx = rect ? pxFromNorm(Bpos, rect) : { x: 0, y: 0 };
 
-  const youClamped = youNorm ? normPoint(youNorm, null) : null;
-  const YouPx = rect && youClamped ? pxFromNorm(youClamped, rect) : null;
-
   const lineClickable = setupEnabled || allowPlayB;
+
+  // =========================
+  // ✅ YOU DOT SMOOTHING (EMA-style via animation)
+  // =========================
+  const [youSmooth, setYouSmooth] = useState(null);
+  const animRef = useRef({ raf: 0, from: null, to: null, t0: 0 });
+
+  useEffect(() => {
+    // If no youNorm, fade it out
+    if (!youNorm || typeof youNorm.x !== "number" || typeof youNorm.y !== "number") {
+      if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
+      animRef.current = { raf: 0, from: null, to: null, t0: 0 };
+      setYouSmooth(null);
+      return;
+    }
+
+    const target = { x: clamp01(youNorm.x), y: clamp01(youNorm.y) };
+    const start = youSmooth ? { ...youSmooth } : target;
+
+    if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
+
+    animRef.current.from = start;
+    animRef.current.to = target;
+    animRef.current.t0 = performance.now();
+
+    const DURATION_MS = 350;
+
+    const step = (now) => {
+      const t = Math.max(0, Math.min(1, (now - animRef.current.t0) / DURATION_MS));
+      // easeOutCubic
+      const e = 1 - Math.pow(1 - t, 3);
+
+      const x = animRef.current.from.x + (animRef.current.to.x - animRef.current.from.x) * e;
+      const y = animRef.current.from.y + (animRef.current.to.y - animRef.current.from.y) * e;
+
+      setYouSmooth({ x, y });
+
+      if (t < 1) {
+        animRef.current.raf = requestAnimationFrame(step);
+      } else {
+        animRef.current.raf = 0;
+      }
+    };
+
+    animRef.current.raf = requestAnimationFrame(step);
+
+    return () => {
+      if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
+      animRef.current.raf = 0;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [youNorm?.x, youNorm?.y]);
+
+  const ringPx = ringPxFromAccuracy(youAccuracyMeters);
 
   return (
     <div
@@ -269,29 +339,6 @@ export default function HoleOverlay({
         height="100%"
         style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
       >
-        {/* Optional YOU -> GREEN overlay line (cyan) */}
-        {YouPx && (
-          <>
-            {/* black under-stroke for contrast */}
-            <line
-              x1={YouPx.x}
-              y1={YouPx.y}
-              x2={Cpx.x}
-              y2={Cpx.y}
-              stroke="rgba(0,0,0,0.75)"
-              strokeWidth="7"
-            />
-            <line
-              x1={YouPx.x}
-              y1={YouPx.y}
-              x2={Cpx.x}
-              y2={Cpx.y}
-              stroke="deepskyblue"
-              strokeWidth="3"
-            />
-          </>
-        )}
-
         {!Bactive ? (
           <>
             <line x1={Apx.x} y1={Apx.y} x2={Cpx.x} y2={Cpx.y} stroke="lime" strokeWidth="3" />
@@ -314,24 +361,49 @@ export default function HoleOverlay({
         )}
       </svg>
 
-      {/* ✅ LIVE YOU DOT */}
-      {youClamped && (
+      {/* ✅ YOU DOT + ACCURACY RING (pointerEvents none so it never blocks dragging) */}
+      {youSmooth && (
         <div
           style={{
             position: "absolute",
-            left: `${youClamped.x * 100}%`,
-            top: `${youClamped.y * 100}%`,
+            left: `${youSmooth.x * 100}%`,
+            top: `${youSmooth.y * 100}%`,
             transform: "translate(-50%, -50%)",
-            width: 18,
-            height: 18,
-            borderRadius: 999,
-            background: "deepskyblue",
-            border: "3px solid white",
-            boxShadow: "0 0 0 3px rgba(0,0,0,0.55)",
-            pointerEvents: "none",
             zIndex: 4,
+            pointerEvents: "none",
           }}
-        />
+        >
+          {/* Ring */}
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              width: ringPx * 2,
+              height: ringPx * 2,
+              borderRadius: 999,
+              border: "2px solid rgba(0,140,255,0.85)",
+              background: "rgba(0,140,255,0.12)",
+              boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
+            }}
+          />
+          {/* Dot */}
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              width: 14,
+              height: 14,
+              borderRadius: 999,
+              background: "rgb(0,140,255)",
+              border: "2px solid white",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.55)",
+            }}
+          />
+        </div>
       )}
 
       {/* A */}

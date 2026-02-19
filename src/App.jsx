@@ -60,6 +60,36 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
+// Progress along tee->green (GPS) then map to A->C (overlay).
+// This is 1D along the hole line (Phase 3). Accuracy ring + smoothing are in HoleOverlay.
+function projectAlongTeeGreen(tee, green, pos) {
+  if (!tee || !green || !pos) return null;
+
+  const R = 6371000;
+  const lat0 = (tee.lat * Math.PI) / 180;
+
+  const toXY = (p) => {
+    const lat = (p.lat * Math.PI) / 180;
+    const lon = (p.lon * Math.PI) / 180;
+    const lon0 = (tee.lon * Math.PI) / 180;
+    return {
+      x: (lon - lon0) * Math.cos(lat0) * R,
+      y: (lat - lat0) * R,
+    };
+  };
+
+  const G = toXY(green);
+  const P = toXY(pos);
+
+  const vx = G.x;
+  const vy = G.y;
+  const denom = vx * vx + vy * vy;
+  if (denom < 0.0001) return 0;
+
+  const t = (P.x * vx + P.y * vy) / denom;
+  return Math.max(0, Math.min(1, t));
+}
+
 function ArrowYardBox({ top, yards, left = 0 }) {
   const W = 70;
 
@@ -121,36 +151,6 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
       ))}
     </select>
   );
-}
-
-// Progress along tee->green (GPS) then map to A->C (overlay).
-// NOTE: This is 1D (along the line). True pinpoint 2D needs calibration (Phase 3b).
-function projectAlongTeeGreen(tee, green, pos) {
-  if (!tee || !green || !pos) return null;
-
-  const R = 6371000;
-  const lat0 = (tee.lat * Math.PI) / 180;
-
-  const toXY = (p) => {
-    const lat = (p.lat * Math.PI) / 180;
-    const lon = (p.lon * Math.PI) / 180;
-    const lon0 = (tee.lon * Math.PI) / 180;
-    return {
-      x: (lon - lon0) * Math.cos(lat0) * R,
-      y: (lat - lat0) * R,
-    };
-  };
-
-  const G = toXY(green);
-  const P = toXY(pos);
-
-  const vx = G.x;
-  const vy = G.y;
-  const denom = vx * vx + vy * vy;
-  if (denom < 0.0001) return 0;
-
-  const t = (P.x * vx + P.y * vy) / denom;
-  return Math.max(0, Math.min(1, t));
 }
 
 export default function App() {
@@ -254,7 +254,7 @@ export default function App() {
       ? `${clubKey.replace(/\s+/g, "")}-${hole.nine}-${String(hole.hole).padStart(2, "0")}`
       : "";
 
-  // ========= GPS (debug counters) =========
+  // ========= GPS =========
   const [pos, setPos] = useState(null);
   const [gpsStatus, setGpsStatus] = useState("GPS not started");
   const watchIdRef = useRef(null);
@@ -288,6 +288,7 @@ export default function App() {
       opts
     );
 
+    // extra poll keeps some Android devices updating smoothly in PWAs
     pollTimerRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(
         (p) => applyFix(p),
@@ -301,7 +302,6 @@ export default function App() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const prevHole = () =>
@@ -319,7 +319,6 @@ export default function App() {
     return roundYards(metersToYards(haversineMeters(pos, hole.green)));
   }, [hole, pos]);
 
-  // Distance from your current pos to this hole (closest of tee/green)
   const youToHoleYards = useMemo(() => {
     if (!hole || !pos) return null;
     const ydT = roundYards(metersToYards(haversineMeters(pos, hole.tee)));
@@ -327,21 +326,25 @@ export default function App() {
     return Math.min(ydT, ydG);
   }, [hole, pos]);
 
+  // ========= Par + SI =========
   const parValue =
     typeof hole?.par === "number"
       ? hole.par
       : defaultParForHole(hole?.displayHole || hole?.hole || 1);
 
   const siValue = typeof hole?.hcp === "number" ? hole.hcp : null;
+
   const parText = `Par ${parValue}`;
   const siText = `SI ${siValue ?? "—"}`;
 
+  // ========= Overlay live state =========
   const [liveOverlay, setLiveOverlay] = useState(null);
   useEffect(() => setLiveOverlay(null), [holeKey]);
 
   const overlayActionsRef = useRef(null);
   const [setupEnabled, setSetupEnabled] = useState(false);
 
+  // ========= BASELINE =========
   const savedDefaults = useMemo(() => {
     return holeKey ? getHoleDefaults(holeKey) : null;
   }, [holeKey]);
@@ -405,13 +408,21 @@ export default function App() {
     return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
-  // ✅ Only show YOU dot if you're actually near the hole
-  // If you're at your house, we hide the dot instead of clamping it to tee/green.
+  const showTargetBoxes = useMemo(() => {
+    return Bactive && typeof teeToTargetYards === "number";
+  }, [Bactive, teeToTargetYards]);
+
+  const showGreenOnlyBox = useMemo(() => {
+    return !Bactive;
+  }, [Bactive]);
+
+  // ✅ YOU dot: only show if reasonably near the hole
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
+
     if (typeof youToHoleYards === "number" && youToHoleYards > YOU_SHOW_WITHIN_YARDS) {
       return null;
     }
@@ -425,20 +436,13 @@ export default function App() {
     };
   }, [hole, pos, A, C, youToHoleYards]);
 
-  const showTargetBoxes = useMemo(() => {
-    return Bactive && typeof teeToTargetYards === "number";
-  }, [Bactive, teeToTargetYards]);
-
-  const showGreenOnlyBox = useMemo(() => {
-    return !Bactive;
-  }, [Bactive]);
-
+  // Layout constants
   const FOOTER_H = 60;
-
   const TOP_BTN_TOP = 40;
   const TOP_BTN_W = 92;
   const TOP_BTN_H = 44;
 
+  // Arrow boxes
   const ARROW_LEFT = 80;
   const ARROW_TOP_BC = 240;
   const ARROW_TOP_AB = 640;
@@ -501,10 +505,9 @@ export default function App() {
         color: "white",
         background: "#0b0b0b",
         minHeight: "100vh",
-        paddingBottom: page === "play" ? FOOTER_H + 24 : 24,
       }}
     >
-      {/* HOME */}
+      {/* HOME PAGE */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
           <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>
@@ -643,7 +646,7 @@ export default function App() {
         </div>
       )}
 
-      {/* PLAY */}
+      {/* PLAY PAGE */}
       {page === "play" && (
         <>
           <div
@@ -672,7 +675,7 @@ export default function App() {
               <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
             )}
 
-            {/* Overlay */}
+            {/* Overlay + YOU dot */}
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -681,6 +684,7 @@ export default function App() {
                 setupEnabled={setupEnabled}
                 allowPlayB={true}
                 youNorm={youNorm}
+                youAccuracyMeters={pos?.accuracyMeters ?? null}
                 onStateChange={(state) => setLiveOverlay(state)}
                 onActionsReady={(actions) => {
                   overlayActionsRef.current = actions;
@@ -690,7 +694,7 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG BOX (so we KNOW if fixes are updating) */}
+            {/* GPS DEBUG (optional but helpful) */}
             <div
               style={{
                 position: "fixed",
@@ -707,12 +711,17 @@ export default function App() {
                 minWidth: 210,
               }}
             >
-              <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS DEBUG</div>
-              <div>Fixes: <b>{fixCount}</b> {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}</div>
-              <div>Acc: <b>{pos?.accuracyMeters != null ? `${Math.round(pos.accuracyMeters)}m` : "—"}</b></div>
-              <div>Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b></div>
-              <div>Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b></div>
-              <div>Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b></div>
+              <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
+              <div>
+                Fixes: <b>{fixCount}</b> {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
+              </div>
+              <div>
+                Acc:{" "}
+                <b>{pos?.accuracyMeters != null ? `${Math.round(pos.accuracyMeters)}m` : "—"}</b>
+              </div>
+              <div>
+                Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
+              </div>
             </div>
 
             {/* HOME + SETUP */}
@@ -757,6 +766,7 @@ export default function App() {
               SETUP
             </button>
 
+            {/* SETUP CONTROLS */}
             {setupEnabled && (
               <div
                 style={{
