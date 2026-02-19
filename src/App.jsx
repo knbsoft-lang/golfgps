@@ -61,7 +61,7 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
-// HIGH-CONTRAST arrow yard box
+// HIGH-CONTRAST arrow yard box (already working for you)
 function ArrowYardBox({ top, yards, left = 0 }) {
   const W = 70;
 
@@ -76,11 +76,8 @@ function ArrowYardBox({ top, yards, left = 0 }) {
         background: "rgba(255,255,255,0.98)",
         color: "#000",
         border: "2px solid #000",
-
-        // Halo outline for busy backgrounds (houses/trees)
         outline: "3px solid rgba(0,0,0,0.60)",
         outlineOffset: 1,
-
         borderRadius: "0 14px 14px 0",
         boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
         pointerEvents: "none",
@@ -126,6 +123,36 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
       ))}
     </select>
   );
+}
+
+// --- Phase 3 math: progress along Tee->Green (GPS) then map to A->C (overlay) ---
+function projectAlongTeeGreen(tee, green, pos) {
+  if (!tee || !green || !pos) return null;
+
+  // Equirectangular projection around tee (good enough for a golf hole)
+  const R = 6371000;
+  const lat0 = (tee.lat * Math.PI) / 180;
+  const toXY = (p) => {
+    const lat = (p.lat * Math.PI) / 180;
+    const lon = (p.lon * Math.PI) / 180;
+    const lon0 = (tee.lon * Math.PI) / 180;
+    return {
+      x: (lon - lon0) * Math.cos(lat0) * R,
+      y: (lat - lat0) * R,
+    };
+  };
+
+  const T = { x: 0, y: 0 };
+  const G = toXY(green);
+  const P = toXY(pos);
+
+  const vx = G.x - T.x;
+  const vy = G.y - T.y;
+  const denom = vx * vx + vy * vy;
+  if (denom < 0.0001) return 0;
+
+  const t = (P.x * vx + P.y * vy) / denom;
+  return Math.max(0, Math.min(1, t));
 }
 
 export default function App() {
@@ -216,21 +243,24 @@ export default function App() {
   useEffect(() => setIdx(0), [courseType, clubKey, mode, nineA, nineB]);
 
   const [startHoleDisplay, setStartHoleDisplay] = useState("1");
-  useEffect(() => setStartHoleDisplay("1"), [courseType, clubKey, mode, nineA, nineB]);
+  useEffect(
+    () => setStartHoleDisplay("1"),
+    [courseType, clubKey, mode, nineA, nineB]
+  );
 
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
 
-  // IMPORTANT: keep this template literal on ONE LINE (prevents paste issues)
   const holeKey =
     hole && clubKey
       ? `${clubKey.replace(/\s+/g, "")}-${hole.nine}-${String(hole.hole).padStart(2, "0")}`
       : "";
 
-  // ========= GPS =========
+  // ========= GPS (Phase 3 upgrade: watch + poll fallback) =========
   const [pos, setPos] = useState(null);
   const [gpsStatus, setGpsStatus] = useState("GPS not started");
   const watchIdRef = useRef(null);
+  const pollTimerRef = useRef(null);
 
   useEffect(() => {
     if (!("geolocation" in navigator)) {
@@ -238,6 +268,9 @@ export default function App() {
       return;
     }
 
+    const opts = { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 };
+
+    // 1) Continuous watch
     watchIdRef.current = navigator.geolocation.watchPosition(
       (p) => {
         setPos({
@@ -245,15 +278,32 @@ export default function App() {
           lon: p.coords.longitude,
           accuracyMeters: p.coords.accuracy,
         });
-        setGpsStatus("GPS locked");
+        setGpsStatus(`GPS locked (${Math.round(p.coords.accuracy)}m)`);
       },
       (err) => setGpsStatus(`GPS error: ${err.message}`),
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+      opts
     );
+
+    // 2) Poll fallback every 1s to prevent Android throttling in PWA
+    pollTimerRef.current = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          setPos({
+            lat: p.coords.latitude,
+            lon: p.coords.longitude,
+            accuracyMeters: p.coords.accuracy,
+          });
+          setGpsStatus(`GPS locked (${Math.round(p.coords.accuracy)}m)`);
+        },
+        () => {},
+        opts
+      );
+    }, 1000);
 
     return () => {
       if (watchIdRef.current)
         navigator.geolocation.clearWatch(watchIdRef.current);
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, []);
 
@@ -262,11 +312,17 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
-  // Straight-line tee->green
+  // Straight-line tee->green yardage (from hole coords)
   const teeToGreenYards = useMemo(() => {
     if (!hole) return null;
     return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
   }, [hole]);
+
+  // You->Green yardage (this SHOULD now update while moving)
+  const youToGreenYards = useMemo(() => {
+    if (!hole || !pos) return null;
+    return roundYards(metersToYards(haversineMeters(pos, hole.green)));
+  }, [hole, pos]);
 
   // ========= Par + SI =========
   const parValue =
@@ -282,6 +338,7 @@ export default function App() {
   // ========= Overlay live state =========
   const [liveOverlay, setLiveOverlay] = useState(null);
   useEffect(() => setLiveOverlay(null), [holeKey]);
+
   const overlayActionsRef = useRef(null);
 
   // Setup Mode
@@ -324,6 +381,7 @@ export default function App() {
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
 
+  // Current points for modeled yardages (LIVE A/C/B)
   const A = liveOverlay?.A || baselineAC?.A || null;
   const C = liveOverlay?.C || baselineAC?.C || null;
   const Bactive = !!liveOverlay?.Bactive;
@@ -351,6 +409,21 @@ export default function App() {
     return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
+  // ========= LIVE YOU DOT (projected along tee->green, mapped to A->C) =========
+  const youNorm = useMemo(() => {
+    if (!hole || !pos) return null;
+    if (!A || !C) return null;
+
+    const t = projectAlongTeeGreen(hole.tee, hole.green, pos);
+    if (typeof t !== "number") return null;
+
+    return {
+      x: A.x + (C.x - A.x) * t,
+      y: A.y + (C.y - A.y) * t,
+    };
+  }, [hole, pos, A, C]);
+
+  // ========= Arrow Box Visibility =========
   const showTargetBoxes = useMemo(() => {
     return Bactive && typeof teeToTargetYards === "number";
   }, [Bactive, teeToTargetYards]);
@@ -367,10 +440,10 @@ export default function App() {
   const TOP_BTN_W = 92;
   const TOP_BTN_H = 44;
 
-  // Arrow boxes position (YOU WANTED 80)
+  // Arrow boxes position
   const ARROW_LEFT = 80;
   const ARROW_TOP_BC = 240;
-  const ARROW_TOP_AB = 640;
+  const ARROW_TOP_AB = 640; // your last change: AB down 100px
   const ARROW_TOP_AC = 260;
 
   const holeNumberText =
@@ -427,6 +500,7 @@ export default function App() {
         color: "white",
         background: "#0b0b0b",
         minHeight: "100vh",
+        paddingBottom: page === "play" ? FOOTER_H + 24 : 24,
       }}
     >
       {/* HOME PAGE */}
@@ -597,7 +671,7 @@ export default function App() {
               <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
             )}
 
-            {/* Overlay */}
+            {/* Overlay (now receives youNorm) */}
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -605,6 +679,7 @@ export default function App() {
                 holeKey={holeKey}
                 setupEnabled={setupEnabled}
                 allowPlayB={true}
+                youNorm={youNorm}
                 onStateChange={(state) => setLiveOverlay(state)}
                 onActionsReady={(actions) => {
                   overlayActionsRef.current = actions;
@@ -788,7 +863,7 @@ export default function App() {
 
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
-                  {teeToGreenYards ?? "—"} yd
+                  You→Green {youToGreenYards ?? "—"} yd
                 </div>
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   {parText} • {siText}

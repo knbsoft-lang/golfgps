@@ -6,11 +6,8 @@ const DEFAULT_A = { x: 0.5, y: 0.75 };
 const DEFAULT_C = { x: 0.5, y: 0.25 };
 
 const BLOCK_B_NEAR_ENDPOINT_PX = 35;
-
-// Double-tap timing (ms)
 const DOUBLE_TAP_MS = 350;
 
-// Finger hit areas (bigger than visible markers)
 const HIT_A = 46;
 const HIT_B = 54;
 const HIT_C = 46;
@@ -55,13 +52,15 @@ export default function HoleOverlay({
   setupEnabled = false,
   allowPlayB = true,
 
+  // ✅ NEW: live you dot position in normalized overlay coords (0..1)
+  youNorm = null,
+
   onStateChange,
   onActionsReady,
 }) {
   const containerRef = useRef(null);
   const [rect, setRect] = useState(null);
 
-  // Double-tap detection on B
   const lastBTapMsRef = useRef(0);
 
   useEffect(() => {
@@ -94,7 +93,6 @@ export default function HoleOverlay({
 
   const [dragging, setDragging] = useState(null);
 
-  // Load defaults on hole change (includes B)
   useEffect(() => {
     const saved = holeKey ? getHoleDefaults(holeKey) : null;
 
@@ -114,7 +112,6 @@ export default function HoleOverlay({
 
     setBactive(!!saved?.Bactive);
     setDragging(null);
-
     lastBTapMsRef.current = 0;
   }, [resetKey, holeKey, fallbackA, fallbackC]);
 
@@ -133,11 +130,7 @@ export default function HoleOverlay({
 
   useEffect(() => {
     if (!onActionsReady) return;
-    onActionsReady({
-      saveDefaults,
-      clearTarget,
-      getState,
-    });
+    onActionsReady({ saveDefaults, clearTarget, getState });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onActionsReady, holeKey, A, C, Bpos, Bactive]);
 
@@ -151,8 +144,6 @@ export default function HoleOverlay({
     setDragging(null);
   }
 
-  // A and C draggable always
-  // B draggable in setup OR play (if allowPlayB)
   function canDrag(which) {
     if (which === "A" || which === "C") return true;
     if (which === "B") return setupEnabled || allowPlayB;
@@ -168,7 +159,6 @@ export default function HoleOverlay({
     if (which === "B") {
       if (!Bactive) return;
 
-      // DOUBLE TAP ON B => CLEAR TARGET
       const now = Date.now();
       if (now - lastBTapMsRef.current <= DOUBLE_TAP_MS) {
         lastBTapMsRef.current = 0;
@@ -202,12 +192,10 @@ export default function HoleOverlay({
       setA({ x: p.x, y: p.y });
       return;
     }
-
     if (dragging === "C") {
       setC({ x: p.x, y: p.y });
       return;
     }
-
     if (dragging === "B") {
       if (!Bactive) return;
       if (!canDrag("B")) return;
@@ -227,7 +215,6 @@ export default function HoleOverlay({
     const Apx = pxFromNorm(A, rect);
     const Cpx = pxFromNorm(C, rect);
 
-    // Don't allow B too close to endpoints
     if (
       distPx(p.px, Apx) < BLOCK_B_NEAR_ENDPOINT_PX ||
       distPx(p.px, Cpx) < BLOCK_B_NEAR_ENDPOINT_PX
@@ -243,6 +230,9 @@ export default function HoleOverlay({
   const Apx = rect ? pxFromNorm(A, rect) : { x: 0, y: 0 };
   const Cpx = rect ? pxFromNorm(C, rect) : { x: 0, y: 0 };
   const Bpx = rect ? pxFromNorm(Bpos, rect) : { x: 0, y: 0 };
+
+  const youClamped = youNorm ? normPoint(youNorm, null) : null;
+  const YouPx = rect && youClamped ? pxFromNorm(youClamped, rect) : null;
 
   const lineClickable = setupEnabled || allowPlayB;
 
@@ -279,6 +269,29 @@ export default function HoleOverlay({
         height="100%"
         style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
       >
+        {/* Optional YOU -> GREEN overlay line (cyan) */}
+        {YouPx && (
+          <>
+            {/* black under-stroke for contrast */}
+            <line
+              x1={YouPx.x}
+              y1={YouPx.y}
+              x2={Cpx.x}
+              y2={Cpx.y}
+              stroke="rgba(0,0,0,0.75)"
+              strokeWidth="7"
+            />
+            <line
+              x1={YouPx.x}
+              y1={YouPx.y}
+              x2={Cpx.x}
+              y2={Cpx.y}
+              stroke="deepskyblue"
+              strokeWidth="3"
+            />
+          </>
+        )}
+
         {!Bactive ? (
           <>
             <line x1={Apx.x} y1={Apx.y} x2={Cpx.x} y2={Cpx.y} stroke="lime" strokeWidth="3" />
@@ -300,6 +313,26 @@ export default function HoleOverlay({
           </>
         )}
       </svg>
+
+      {/* ✅ LIVE YOU DOT */}
+      {youClamped && (
+        <div
+          style={{
+            position: "absolute",
+            left: `${youClamped.x * 100}%`,
+            top: `${youClamped.y * 100}%`,
+            transform: "translate(-50%, -50%)",
+            width: 18,
+            height: 18,
+            borderRadius: 999,
+            background: "deepskyblue",
+            border: "3px solid white",
+            boxShadow: "0 0 0 3px rgba(0,0,0,0.55)",
+            pointerEvents: "none",
+            zIndex: 4,
+          }}
+        />
+      )}
 
       {/* A */}
       <Marker
@@ -339,8 +372,7 @@ export default function HoleOverlay({
 function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
   const hs = typeof hitSize === "number" ? hitSize : 44;
 
-  const visibleSize =
-    kind === "A" ? 30 : kind === "B" ? 30 : 18;
+  const visibleSize = kind === "A" ? 30 : kind === "B" ? 30 : 18;
   const dotSize = kind === "C" ? 5 : 6;
 
   const borderRadius = kind === "A" ? 6 : 999;
