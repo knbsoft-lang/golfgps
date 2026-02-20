@@ -370,7 +370,7 @@ export default function HoleOverlay({
         )}
       </svg>
 
-      {/* YOU DOT + ACCURACY RING (now 25% larger) */}
+      {/* YOU DOT + ACCURACY RING */}
       {youSmooth && (
         <div
           style={{

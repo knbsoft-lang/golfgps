@@ -24,6 +24,10 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
+function clamp01(n) {
+  return Math.max(0, Math.min(1, n));
+}
+
 function distNorm(p1, p2) {
   const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
   const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
@@ -68,7 +72,6 @@ function buildRound(club, mode, nineA, nineB) {
 
 /**
  * Bearing-based projection (great-circle-ish) to compute progress along Tee->Green.
- * This is more stable than flat XY and reduces PC vs Tablet drift.
  *
  * Returns t in [0..1]
  */
@@ -109,13 +112,49 @@ function projectAlongTeeGreen(tee, green, pos) {
   const brgTG = bearingRad(tee, green);
   const brgTP = bearingRad(tee, pos);
 
-  // Along-track distance (meters) along the tee->green direction
-  // using simple projection of dTP onto the direction difference.
   const dAng = angleDiff(brgTG, brgTP);
   const along = dTP * Math.cos(dAng);
 
   const t = along / dTG;
   return Math.max(0, Math.min(1, t));
+}
+
+/**
+ * Cross-track (left/right) calculation using a local flat approximation near the tee.
+ * - Returns signed cross-track meters: +RIGHT, -LEFT (relative to tee->green direction)
+ * - Also returns local along-track meters (not used for t; we still use bearing-t for stability)
+ */
+function crossTrackMetersRightPositive(tee, green, pos) {
+  if (!tee || !green || !pos) return null;
+
+  // Local tangent plane (equirectangular) around tee
+  const R = 6371000; // Earth radius meters
+  const toRad = (d) => (d * Math.PI) / 180;
+
+  const lat0 = toRad(tee.lat);
+  const dLatG = toRad(green.lat - tee.lat);
+  const dLonG = toRad(green.lon - tee.lon);
+  const dLatP = toRad(pos.lat - tee.lat);
+  const dLonP = toRad(pos.lon - tee.lon);
+
+  // x east, y north (meters)
+  const ACx = dLonG * Math.cos(lat0) * R;
+  const ACy = dLatG * R;
+
+  const APx = dLonP * Math.cos(lat0) * R;
+  const APy = dLatP * R;
+
+  const len = Math.hypot(ACx, ACy);
+  if (!isFinite(len) || len < 0.5) return null;
+
+  // z = AC x AP (2D cross product magnitude with sign)
+  // If z > 0 => AP is LEFT of AC (standard math orientation)
+  const z = ACx * APy - ACy * APx;
+
+  // We want +RIGHT, -LEFT => flip the sign
+  const crossMeters = -z / len;
+
+  return crossMeters;
 }
 
 function ArrowYardBox({ top, yards, left = 0 }) {
@@ -449,6 +488,39 @@ export default function App() {
   // ✅ YOU dot: only show if reasonably near the hole
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
+  // ✅ Cross-track visual scaling (calibration placeholder)
+  // 1.0 means "use yardsPerNormUnit directly".
+  // If dot shifts too far, lower this (ex: 0.35). If too subtle, raise it.
+  const CROSS_VISUAL_SCALE = 0.35;
+
+  // ✅ Toggle: Offset dot left/right
+  const [crossOffsetOn, setCrossOffsetOn] = useState(true);
+
+  // ✅ Cross-track yards (signed): +RIGHT, -LEFT
+  const crossTrackYardsSigned = useMemo(() => {
+    if (!hole || !pos) return null;
+    const crossM = crossTrackMetersRightPositive(hole.tee, hole.green, pos);
+    if (typeof crossM !== "number" || !isFinite(crossM)) return null;
+
+    // Keep sign, round to nearest yard
+    const yd = metersToYards(crossM);
+    const ydRounded = Math.round(yd);
+
+    // Small noise clamp: if within +/- 1 yd, show 0
+    if (Math.abs(ydRounded) <= 1) return 0;
+
+    return ydRounded;
+  }, [hole, pos]);
+
+  const crossTrackText = useMemo(() => {
+    if (crossTrackYardsSigned == null) return "—";
+    if (crossTrackYardsSigned === 0) return "0 yd";
+    const side = crossTrackYardsSigned > 0 ? "RIGHT" : "LEFT";
+    const sign = crossTrackYardsSigned > 0 ? "+" : "−";
+    return `${sign}${Math.abs(crossTrackYardsSigned)} yd (${side})`;
+  }, [crossTrackYardsSigned]);
+
+  // ✅ YOU dot position (now with optional cross-track offset)
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
@@ -460,14 +532,55 @@ export default function App() {
       return null;
     }
 
+    // Along-track t (stable)
     const t = projectAlongTeeGreen(hole.tee, hole.green, pos);
     if (typeof t !== "number") return null;
 
-    return {
+    // Base point on centerline in overlay space
+    const base = {
       x: A.x + (C.x - A.x) * t,
       y: A.y + (C.y - A.y) * t,
     };
-  }, [hole, pos, A, C, youToHoleYards]);
+
+    // If no offset requested, return centerline point
+    if (!crossOffsetOn) return base;
+
+    // Need overlay scale to convert yards => normalized units
+    if (!yardsPerNormUnit) return base;
+    if (typeof crossTrackYardsSigned !== "number") return base;
+
+    // Compute perpendicular (RIGHT side) in overlay normalized coordinates
+    const dx = C.x - A.x;
+    const dy = C.y - A.y;
+    const len = Math.hypot(dx, dy);
+    if (!isFinite(len) || len < 0.0001) return base;
+
+    // Right-hand perpendicular in screen coords (x right, y down):
+    // clockwise rotation => (dy, -dx)
+    const perpRight = { x: dy / len, y: -dx / len };
+
+    // Convert yards => normalized distance
+    const normUnitsPerYard = 1 / yardsPerNormUnit;
+
+    const offsetNorm =
+      crossTrackYardsSigned * normUnitsPerYard * CROSS_VISUAL_SCALE;
+
+    const out = {
+      x: clamp01(base.x + perpRight.x * offsetNorm),
+      y: clamp01(base.y + perpRight.y * offsetNorm),
+    };
+
+    return out;
+  }, [
+    hole,
+    pos,
+    A,
+    C,
+    youToHoleYards,
+    crossOffsetOn,
+    crossTrackYardsSigned,
+    yardsPerNormUnit,
+  ]);
 
   // Layout constants
   const FOOTER_H = 60;
@@ -748,7 +861,7 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG (includes build id) */}
+            {/* GPS DEBUG (now includes: build, trust, cross-track + toggle) */}
             <div
               style={{
                 position: "fixed",
@@ -761,8 +874,9 @@ export default function App() {
                 fontSize: 12,
                 lineHeight: 1.25,
                 zIndex: 10002,
-                pointerEvents: "none",
-                minWidth: 210,
+                pointerEvents: "auto", // ✅ needed for checkbox click
+                userSelect: "none",
+                minWidth: 230,
               }}
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
@@ -796,7 +910,6 @@ export default function App() {
                 </b>
               </div>
 
-              {/* ✅ TRUST INDICATOR (Task 1) */}
               <div>
                 Trust:{" "}
                 <b>
@@ -810,7 +923,32 @@ export default function App() {
                 </b>
               </div>
 
+              {/* ✅ NEW: Cross-track */}
               <div>
+                Cross: <b>{crossTrackText}</b>
+              </div>
+
+              {/* ✅ NEW: Toggle dot offset */}
+              <div style={{ marginTop: 6 }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: "pointer",
+                    opacity: 0.95,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={crossOffsetOn}
+                    onChange={(e) => setCrossOffsetOn(e.target.checked)}
+                  />
+                  <span style={{ fontWeight: 800 }}>Offset dot</span>
+                </label>
+              </div>
+
+              <div style={{ marginTop: 4, opacity: 0.85 }}>
                 Near hole:{" "}
                 <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
               </div>
@@ -822,9 +960,9 @@ export default function App() {
               style={{
                 position: "fixed",
                 left: 10,
-                top: TOP_BTN_TOP,
-                width: TOP_BTN_W,
-                height: TOP_BTN_H,
+                top: 40,
+                width: 92,
+                height: 44,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -842,9 +980,9 @@ export default function App() {
               style={{
                 position: "fixed",
                 right: 10,
-                top: TOP_BTN_TOP,
-                width: TOP_BTN_W,
-                height: TOP_BTN_H,
+                top: 40,
+                width: 92,
+                height: 44,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -944,7 +1082,7 @@ export default function App() {
               left: 0,
               right: 0,
               bottom: 0,
-              height: FOOTER_H,
+              height: 60,
               background: "white",
               color: "black",
               borderTop: "1px solid #ddd",
