@@ -764,8 +764,8 @@ export default function App() {
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
 
               <div style={{ marginBottom: 4 }}>
-                Build: <b>{BUILD_TEST_ID}</b>
-              </div>
+  Sync: <b>{TEST_SYNC_ID}</b>
+</div>
 
               <div>
                 Fixes: <b>{fixCount}</b>{" "}
