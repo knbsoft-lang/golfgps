@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-02";
+const TEST_SYNC_ID = "TEST-03";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 // Requires the vite.config.js change that defines __BUILD_ID__
@@ -790,6 +790,14 @@ export default function App() {
                 Near hole:{" "}
                 <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
               </div>
+		<div>
+ 	 	Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
+		</div>
+		<div>
+  		Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
+		</div>
+
+
             </div>
 
             {/* HOME + SETUP */}
