@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-03";
+const TEST_SYNC_ID = "TEST-04";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 // Requires the vite.config.js change that defines __BUILD_ID__
@@ -320,7 +320,11 @@ export default function App() {
     );
 
     pollTimerRef.current = setInterval(() => {
-      navigator.geolocation.getCurrentPosition((p) => applyFix(p), () => {}, opts);
+      navigator.geolocation.getCurrentPosition(
+        (p) => applyFix(p),
+        () => {},
+        opts
+      );
     }, 1000);
 
     return () => {
@@ -763,21 +767,26 @@ export default function App() {
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
 
-		<div>
-  Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
-</div>
-<div>
-  Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
-</div>
+              <div>
+                Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
+              </div>
+              <div>
+                Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
+              </div>
 
               <div style={{ marginBottom: 4 }}>
-  Sync: <b>{TEST_SYNC_ID}</b>
-</div>
+                Sync: <b>{TEST_SYNC_ID}</b>
+              </div>
+
+              <div style={{ marginBottom: 4 }}>
+                Build: <b>{BUILD_TEST_ID}</b>
+              </div>
 
               <div>
                 Fixes: <b>{fixCount}</b>{" "}
                 {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
               </div>
+
               <div>
                 Acc:{" "}
                 <b>
@@ -786,18 +795,25 @@ export default function App() {
                     : "—"}
                 </b>
               </div>
+
+              {/* ✅ TRUST INDICATOR (Task 1) */}
+              <div>
+                Trust:{" "}
+                <b>
+                  {pos?.accuracyMeters != null
+                    ? pos.accuracyMeters <= 10
+                      ? "HIGH"
+                      : pos.accuracyMeters <= 25
+                      ? "OK"
+                      : "LOW"
+                    : "—"}
+                </b>
+              </div>
+
               <div>
                 Near hole:{" "}
                 <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
               </div>
-		<div>
- 	 	Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
-		</div>
-		<div>
-  		Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
-		</div>
-
-
             </div>
 
             {/* HOME + SETUP */}
