@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-04";
+const TEST_SYNC_ID = "TEST-05";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 // Requires the vite.config.js change that defines __BUILD_ID__
@@ -491,7 +491,7 @@ export default function App() {
   // ✅ Cross-track visual scaling (calibration placeholder)
   // 1.0 means "use yardsPerNormUnit directly".
   // If dot shifts too far, lower this (ex: 0.35). If too subtle, raise it.
-  const CROSS_VISUAL_SCALE = 0.35;
+  const CROSS_VISUAL_SCALE = 1.0;
 
   // ✅ Toggle: Offset dot left/right
   const [crossOffsetOn, setCrossOffsetOn] = useState(true);
