@@ -6,6 +6,10 @@ import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
+// ✅ CHANGE THIS ANY TIME YOU WANT TO CONFIRM TABLET UPDATED
+// Example: "TEST-001", then next push "TEST-002", etc.
+const BUILD_TEST_ID = "TEST-001";
+
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
 
 function defaultParForHole(holeNumber) {
@@ -91,7 +95,7 @@ function projectTeeGreen2D(tee, green, pos) {
   };
 
   const G = toXY(green); // from tee origin
-  const P = toXY(pos);   // from tee origin
+  const P = toXY(pos); // from tee origin
 
   const vx = G.x;
   const vy = G.y;
@@ -107,7 +111,7 @@ function projectTeeGreen2D(tee, green, pos) {
 
   // perpendicular signed distance (left/right)
   // v = (-uy, ux)
-  const perpMeters = P.x * (-uy) + P.y * (ux);
+  const perpMeters = P.x * (-uy) + P.y * ux;
 
   return { t, perpMeters };
 }
@@ -310,7 +314,6 @@ export default function App() {
       opts
     );
 
-    // extra poll keeps some Android devices updating smoothly in PWAs
     pollTimerRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(
         (p) => applyFix(p),
@@ -438,40 +441,17 @@ export default function App() {
     return !Bactive;
   }, [Bactive]);
 
-  // ✅ YOU dot: only show if reasonably near the hole
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
-  // ✅ NEW: Side-to-side tuning knobs (because hole images aren’t perfect maps)
-  // Start here:
-  // - If dot doesn’t move sideways enough: increase PERP_SCALE
-  // - If dot moves sideways too much: decrease PERP_SCALE
   const PERP_SCALE = 0.85;
-
-  // Clamp sideways influence so GPS noise doesn’t throw dot off-screen
   const MAX_PERP_YARDS = 60;
 
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
 
-    if (
-      typeof youToHoleYards === "number" &&
-      youToHoleYards > YOU_SHOW_WITHIN_YARDS
-    ) {
+    if (typeof youToHoleYards === "number" && youToHoleYards > YOU_SHOW_WITHIN_YARDS) {
       return null;
-    }
-
-    // Need this so we can convert sideways meters -> overlay norm units
-    if (!yardsPerNormUnit || !baselineLen) {
-      // fallback to old behavior (along the line only)
-      const proj = projectTeeGreen2D(hole.tee, hole.green, pos);
-      if (!proj) return null;
-
-      const t = proj.t;
-      return {
-        x: A.x + (C.x - A.x) * t,
-        y: A.y + (C.y - A.y) * t,
-      };
     }
 
     const proj = projectTeeGreen2D(hole.tee, hole.green, pos);
@@ -479,48 +459,40 @@ export default function App() {
 
     const t = proj.t;
 
-    // Base point along overlay A->C
     const baseX = A.x + (C.x - A.x) * t;
     const baseY = A.y + (C.y - A.y) * t;
 
-    // Convert perpendicular meters -> perpendicular yards
+    if (!yardsPerNormUnit || !baselineLen) {
+      return { x: clamp01(baseX), y: clamp01(baseY) };
+    }
+
     let perpYards = metersToYards(proj.perpMeters) * PERP_SCALE;
     perpYards = Math.max(-MAX_PERP_YARDS, Math.min(MAX_PERP_YARDS, perpYards));
 
-    // Convert perpendicular yards -> overlay "norm units"
-    // (same scale as yardage modeling along the line)
     const perpNorm = perpYards / yardsPerNormUnit;
 
-    // Perpendicular unit vector in overlay space
     const dx = C.x - A.x;
     const dy = C.y - A.y;
     const len = Math.hypot(dx, dy);
-
-    if (len < 0.0001) {
-      return { x: baseX, y: baseY };
-    }
+    if (len < 0.0001) return { x: clamp01(baseX), y: clamp01(baseY) };
 
     const ux = dx / len;
     const uy = dy / len;
 
-    // left perpendicular
     const px = -uy;
     const py = ux;
 
-    // Apply sideways offset
-    const outX = clamp01(baseX + px * perpNorm);
-    const outY = clamp01(baseY + py * perpNorm);
-
-    return { x: outX, y: outY };
+    return {
+      x: clamp01(baseX + px * perpNorm),
+      y: clamp01(baseY + py * perpNorm),
+    };
   }, [hole, pos, A, C, youToHoleYards, yardsPerNormUnit, baselineLen]);
 
-  // Layout constants
   const FOOTER_H = 60;
   const TOP_BTN_TOP = 40;
   const TOP_BTN_W = 92;
   const TOP_BTN_H = 44;
 
-  // Arrow boxes
   const ARROW_LEFT = 80;
   const ARROW_TOP_BC = 240;
   const ARROW_TOP_AB = 640;
@@ -585,7 +557,6 @@ export default function App() {
         minHeight: "100vh",
       }}
     >
-      {/* HOME PAGE */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
           <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>
@@ -647,7 +618,7 @@ export default function App() {
                       value={nineA}
                       onChange={setNineA}
                       placeholder="First 9 holes"
-                      options={nineNames}
+                      options={Object.keys(club?.nines || {})}
                     />
                   )}
 
@@ -656,7 +627,7 @@ export default function App() {
                       value={nineB}
                       onChange={setNineB}
                       placeholder="Second 9 holes"
-                      options={nineNames.filter((n) => n !== nineA)}
+                      options={Object.keys(club?.nines || {}).filter((n) => n !== nineA)}
                     />
                   )}
 
@@ -724,7 +695,6 @@ export default function App() {
         </div>
       )}
 
-      {/* PLAY PAGE */}
       {page === "play" && (
         <>
           <div
@@ -738,14 +708,11 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {/* Arrow boxes */}
             {showGreenOnlyBox && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AC}
-                yards={
-                  typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards
-                }
+                yards={typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards}
               />
             )}
             {showTargetBoxes && (
@@ -755,7 +722,6 @@ export default function App() {
               <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
             )}
 
-            {/* Overlay + YOU dot */}
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -774,7 +740,7 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG */}
+            {/* GPS DEBUG (now includes BUILD TEST ID) */}
             <div
               style={{
                 position: "fixed",
@@ -792,6 +758,11 @@ export default function App() {
               }}
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
+
+              <div style={{ marginBottom: 4 }}>
+                Build: <b>{BUILD_TEST_ID}</b>
+              </div>
+
               <div>
                 Fixes: <b>{fixCount}</b> {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
               </div>
@@ -804,7 +775,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* HOME + SETUP */}
             <button
               onClick={goHome}
               style={{
@@ -846,7 +816,6 @@ export default function App() {
               SETUP
             </button>
 
-            {/* SETUP CONTROLS */}
             {setupEnabled && (
               <div
                 style={{
@@ -878,7 +847,11 @@ export default function App() {
                 </div>
 
                 <button
-                  onClick={handleSaveDefaults}
+                  onClick={() => {
+                    overlayActionsRef.current?.saveDefaults?.();
+                    const st = overlayActionsRef.current?.getState?.();
+                    if (st?.A && st?.C) setBaselineAC({ A: st.A, C: st.C });
+                  }}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
@@ -893,7 +866,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={handleClearTarget}
+                  onClick={() => overlayActionsRef.current?.clearTarget?.()}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
@@ -925,14 +898,13 @@ export default function App() {
             )}
           </div>
 
-          {/* Footer */}
           <div
             style={{
               position: "fixed",
               left: 0,
               right: 0,
               bottom: 0,
-              height: 60,
+              height: FOOTER_H,
               background: "white",
               color: "black",
               borderTop: "1px solid #ddd",
@@ -946,7 +918,7 @@ export default function App() {
             }}
           >
             <button
-              onClick={prevHole}
+              onClick={() => setIdx((v) => clamp(v - 1, 0, Math.max(0, roundHoles.length - 1)))}
               disabled={idx === 0}
               style={{
                 width: 60,
@@ -973,7 +945,7 @@ export default function App() {
               }}
             >
               <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>
-                {holeNumberText}
+                {hole?.displayHole != null ? String(hole.displayHole).padStart(2, "0") : "—"}
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
@@ -981,13 +953,18 @@ export default function App() {
                   You→Green {youToGreenYards ?? "—"} yd
                 </div>
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
-                  {parText} • {siText}
+                  {`Par ${
+                    typeof hole?.par === "number"
+                      ? hole.par
+                      : defaultParForHole(hole?.displayHole || hole?.hole || 1)
+                  }`}{" "}
+                  • {`SI ${typeof hole?.hcp === "number" ? hole.hcp : "—"}`}
                 </div>
               </div>
             </div>
 
             <button
-              onClick={nextHole}
+              onClick={() => setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)))}
               disabled={idx === roundHoles.length - 1}
               style={{
                 width: 60,
