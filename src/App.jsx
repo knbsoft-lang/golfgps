@@ -6,9 +6,8 @@ import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
-// ✅ CHANGE THIS ANY TIME YOU WANT TO CONFIRM TABLET UPDATED
-// Example: "TEST-001", then next push "TEST-002", etc.
-const BUILD_TEST_ID = "TEST-001";
+// ✅ CHANGE THIS EACH PUSH TO VERIFY TABLET UPDATED
+const BUILD_TEST_ID = "TEST-002";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
 
@@ -21,7 +20,6 @@ function defaultParForHole(holeNumber) {
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
-
 function clamp01(n) {
   return Math.max(0, Math.min(1, n));
 }
@@ -74,14 +72,13 @@ function buildRound(club, mode, nineA, nineB) {
  *  - t: 0..1 progress along tee->green
  *  - perpMeters: signed meters left/right of the tee->green line
  *
- * Sign convention:
- *  +perpMeters = left of the line when facing from Tee toward Green
- *  -perpMeters = right of the line
+ * +perpMeters = left of the line when facing Tee -> Green
+ * -perpMeters = right of the line
  */
 function projectTeeGreen2D(tee, green, pos) {
   if (!tee || !green || !pos) return null;
 
-  const R = 6371000; // meters
+  const R = 6371000;
   const lat0 = (tee.lat * Math.PI) / 180;
   const lon0 = (tee.lon * Math.PI) / 180;
 
@@ -94,8 +91,8 @@ function projectTeeGreen2D(tee, green, pos) {
     };
   };
 
-  const G = toXY(green); // from tee origin
-  const P = toXY(pos); // from tee origin
+  const G = toXY(green);
+  const P = toXY(pos);
 
   const vx = G.x;
   const vy = G.y;
@@ -105,20 +102,17 @@ function projectTeeGreen2D(tee, green, pos) {
   const ux = vx / len;
   const uy = vy / len;
 
-  // progress along the line
-  const s = P.x * ux + P.y * uy; // meters
+  const s = P.x * ux + P.y * uy;
   const t = clamp01(s / len);
 
-  // perpendicular signed distance (left/right)
   // v = (-uy, ux)
   const perpMeters = P.x * (-uy) + P.y * ux;
 
-  return { t, perpMeters };
+  return { t, perpMeters, lenMeters: len };
 }
 
 function ArrowYardBox({ top, yards, left = 0 }) {
   const W = 70;
-
   return (
     <div
       style={{
@@ -180,7 +174,7 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
 }
 
 export default function App() {
-  const [page, setPage] = useState("home"); // "home" | "play"
+  const [page, setPage] = useState("home");
 
   const clubKeysAll = Object.keys(COURSE_CATALOG);
 
@@ -267,10 +261,7 @@ export default function App() {
   useEffect(() => setIdx(0), [courseType, clubKey, mode, nineA, nineB]);
 
   const [startHoleDisplay, setStartHoleDisplay] = useState("1");
-  useEffect(
-    () => setStartHoleDisplay("1"),
-    [courseType, clubKey, mode, nineA, nineB]
-  );
+  useEffect(() => setStartHoleDisplay("1"), [courseType, clubKey, mode, nineA, nineB]);
 
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
@@ -315,16 +306,11 @@ export default function App() {
     );
 
     pollTimerRef.current = setInterval(() => {
-      navigator.geolocation.getCurrentPosition(
-        (p) => applyFix(p),
-        () => {},
-        opts
-      );
+      navigator.geolocation.getCurrentPosition((p) => applyFix(p), () => {}, opts);
     }, 1000);
 
     return () => {
-      if (watchIdRef.current)
-        navigator.geolocation.clearWatch(watchIdRef.current);
+      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, []);
@@ -356,7 +342,6 @@ export default function App() {
     typeof hole?.par === "number"
       ? hole.par
       : defaultParForHole(hole?.displayHole || hole?.hole || 1);
-
   const siValue = typeof hole?.hcp === "number" ? hole.hcp : null;
 
   const parText = `Par ${parValue}`;
@@ -370,9 +355,7 @@ export default function App() {
   const [setupEnabled, setSetupEnabled] = useState(false);
 
   // ========= BASELINE =========
-  const savedDefaults = useMemo(() => {
-    return holeKey ? getHoleDefaults(holeKey) : null;
-  }, [holeKey]);
+  const savedDefaults = useMemo(() => (holeKey ? getHoleDefaults(holeKey) : null), [holeKey]);
 
   const [baselineAC, setBaselineAC] = useState(null);
 
@@ -425,34 +408,44 @@ export default function App() {
 
   const modeledTotalYards = useMemo(() => {
     if (!yardsPerNormUnit || !A || !C) return null;
-
-    if (!Bactive || !B) {
-      return roundYards(distNorm(A, C) * yardsPerNormUnit);
-    }
-
+    if (!Bactive || !B) return roundYards(distNorm(A, C) * yardsPerNormUnit);
     return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
-  const showTargetBoxes = useMemo(() => {
-    return Bactive && typeof teeToTargetYards === "number";
-  }, [Bactive, teeToTargetYards]);
+  const showTargetBoxes = useMemo(() => Bactive && typeof teeToTargetYards === "number", [
+    Bactive,
+    teeToTargetYards,
+  ]);
+  const showGreenOnlyBox = useMemo(() => !Bactive, [Bactive]);
 
-  const showGreenOnlyBox = useMemo(() => {
-    return !Bactive;
-  }, [Bactive]);
-
+  // ========= YOU DOT MAPPING =========
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
+  // (On-course stable)
   const PERP_SCALE = 0.85;
   const MAX_PERP_YARDS = 60;
+
+  // Debug values
+  const projDebug = useMemo(() => {
+    if (!hole || !pos) return null;
+    const proj = projectTeeGreen2D(hole.tee, hole.green, pos);
+    if (!proj) return null;
+    const rawPerpYards = metersToYards(proj.perpMeters);
+    const scaledPerpYards = rawPerpYards * PERP_SCALE;
+    const clampedPerpYards = Math.max(-MAX_PERP_YARDS, Math.min(MAX_PERP_YARDS, scaledPerpYards));
+    return {
+      t: proj.t,
+      rawPerpYards,
+      scaledPerpYards,
+      clampedPerpYards,
+    };
+  }, [hole, pos]);
 
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
 
-    if (typeof youToHoleYards === "number" && youToHoleYards > YOU_SHOW_WITHIN_YARDS) {
-      return null;
-    }
+    if (typeof youToHoleYards === "number" && youToHoleYards > YOU_SHOW_WITHIN_YARDS) return null;
 
     const proj = projectTeeGreen2D(hole.tee, hole.green, pos);
     if (!proj) return null;
@@ -468,7 +461,6 @@ export default function App() {
 
     let perpYards = metersToYards(proj.perpMeters) * PERP_SCALE;
     perpYards = Math.max(-MAX_PERP_YARDS, Math.min(MAX_PERP_YARDS, perpYards));
-
     const perpNorm = perpYards / yardsPerNormUnit;
 
     const dx = C.x - A.x;
@@ -479,6 +471,7 @@ export default function App() {
     const ux = dx / len;
     const uy = dy / len;
 
+    // left perpendicular
     const px = -uy;
     const py = ux;
 
@@ -488,6 +481,7 @@ export default function App() {
     };
   }, [hole, pos, A, C, youToHoleYards, yardsPerNormUnit, baselineLen]);
 
+  // ========= UI CONSTS =========
   const FOOTER_H = 60;
   const TOP_BTN_TOP = 40;
   const TOP_BTN_W = 92;
@@ -523,11 +517,9 @@ export default function App() {
 
   function goPlay() {
     if (!roundReady) return;
-
     const desired = parseInt(startHoleDisplay || "1", 10);
     const i = roundHoles.findIndex((h) => h.displayHole === desired);
     setIdx(i >= 0 ? i : 0);
-
     setPage("play");
   }
 
@@ -549,56 +541,24 @@ export default function App() {
     lastFixMs > 0 ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000)) : null;
 
   return (
-    <div
-      style={{
-        fontFamily: "system-ui",
-        color: "white",
-        background: "#0b0b0b",
-        minHeight: "100vh",
-      }}
-    >
+    <div style={{ fontFamily: "system-ui", color: "white", background: "#0b0b0b", minHeight: "100vh" }}>
+      {/* HOME PAGE */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
-          <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>
-            Golf GPS
-          </div>
+          <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>Golf GPS</div>
 
-          <div
-            style={{
-              border: "1px solid #222",
-              borderRadius: 14,
-              background: "#101010",
-              padding: 12,
-            }}
-          >
-            <div style={{ fontWeight: 900, marginBottom: 10, opacity: 0.95 }}>
-              Selections
-            </div>
+          <div style={{ border: "1px solid #222", borderRadius: 14, background: "#101010", padding: 12 }}>
+            <div style={{ fontWeight: 900, marginBottom: 10, opacity: 0.95 }}>Selections</div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <SelectBox
-                value={courseType}
-                onChange={setCourseType}
-                placeholder="Course Type"
-                options={["Executive", "Championship"]}
-              />
+              <SelectBox value={courseType} onChange={setCourseType} placeholder="Course Type" options={["Executive", "Championship"]} />
 
               {courseType && (
-                <SelectBox
-                  value={clubKey}
-                  onChange={setClubKey}
-                  placeholder="Course"
-                  options={filteredClubKeys}
-                />
+                <SelectBox value={clubKey} onChange={setClubKey} placeholder="Course" options={filteredClubKeys} />
               )}
 
               {courseType === "Executive" && clubKey && (
-                <SelectBox
-                  value={teeBox}
-                  onChange={setTeeBox}
-                  placeholder="Tee Box"
-                  options={TEE_BOXES}
-                />
+                <SelectBox value={teeBox} onChange={setTeeBox} placeholder="Tee Box" options={TEE_BOXES} />
               )}
 
               {courseType === "Championship" && clubKey && (
@@ -614,31 +574,15 @@ export default function App() {
                   />
 
                   {mode && (
-                    <SelectBox
-                      value={nineA}
-                      onChange={setNineA}
-                      placeholder="First 9 holes"
-                      options={Object.keys(club?.nines || {})}
-                    />
+                    <SelectBox value={nineA} onChange={setNineA} placeholder="First 9 holes" options={nineNames} />
                   )}
 
                   {mode === "18" && nineA && (
-                    <SelectBox
-                      value={nineB}
-                      onChange={setNineB}
-                      placeholder="Second 9 holes"
-                      options={Object.keys(club?.nines || {}).filter((n) => n !== nineA)}
-                    />
+                    <SelectBox value={nineB} onChange={setNineB} placeholder="Second 9 holes" options={nineNames.filter((n) => n !== nineA)} />
                   )}
 
-                  {((mode === "9" && nineA) ||
-                    (mode === "18" && nineA && nineB)) && (
-                    <SelectBox
-                      value={teeBox}
-                      onChange={setTeeBox}
-                      placeholder="Tee Box"
-                      options={TEE_BOXES}
-                    />
+                  {((mode === "9" && nineA) || (mode === "18" && nineA && nineB)) && (
+                    <SelectBox value={teeBox} onChange={setTeeBox} placeholder="Tee Box" options={TEE_BOXES} />
                   )}
                 </>
               )}
@@ -656,22 +600,9 @@ export default function App() {
               )}
             </div>
 
-            <div
-              style={{
-                marginTop: 12,
-                padding: 10,
-                border: "1px solid #222",
-                borderRadius: 12,
-                background: "#0d0d0d",
-                lineHeight: 1.5,
-                fontSize: 13,
-                opacity: 0.95,
-              }}
-            >
+            <div style={{ marginTop: 12, padding: 10, border: "1px solid #222", borderRadius: 12, background: "#0d0d0d", lineHeight: 1.5, fontSize: 13, opacity: 0.95 }}>
               <div style={{ fontWeight: 900, marginBottom: 6 }}>{gpsStatus}</div>
-              <div style={{ opacity: 0.9 }}>
-                Tip: GPS lock may take 10–30 seconds after Airplane Mode.
-              </div>
+              <div style={{ opacity: 0.9 }}>Tip: GPS lock may take 10–30 seconds after Airplane Mode.</div>
             </div>
 
             <button
@@ -695,33 +626,18 @@ export default function App() {
         </div>
       )}
 
+      {/* PLAY PAGE */}
       {page === "play" && (
         <>
-          <div
-            style={{
-              position: "fixed",
-              left: 0,
-              top: 0,
-              right: 0,
-              bottom: FOOTER_H,
-              background: "#0b0b0b",
-              overflow: "hidden",
-            }}
-          >
+          <div style={{ position: "fixed", left: 0, top: 0, right: 0, bottom: 60, background: "#0b0b0b", overflow: "hidden" }}>
+            {/* Arrow boxes */}
             {showGreenOnlyBox && (
-              <ArrowYardBox
-                left={ARROW_LEFT}
-                top={ARROW_TOP_AC}
-                yards={typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards}
-              />
+              <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AC} yards={typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards} />
             )}
-            {showTargetBoxes && (
-              <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_BC} yards={targetToGreenYards} />
-            )}
-            {showTargetBoxes && (
-              <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />
-            )}
+            {showTargetBoxes && <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_BC} yards={targetToGreenYards} />}
+            {showTargetBoxes && <ArrowYardBox left={ARROW_LEFT} top={ARROW_TOP_AB} yards={teeToTargetYards} />}
 
+            {/* Overlay + YOU dot */}
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -740,12 +656,12 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG (now includes BUILD TEST ID) */}
+            {/* GPS DEBUG (truth readout) */}
             <div
               style={{
                 position: "fixed",
                 left: 10,
-                bottom: FOOTER_H + 10,
+                bottom: 60 + 10,
                 padding: "8px 10px",
                 borderRadius: 12,
                 border: "2px solid rgba(255,255,255,0.25)",
@@ -754,35 +670,48 @@ export default function App() {
                 lineHeight: 1.25,
                 zIndex: 10002,
                 pointerEvents: "none",
-                minWidth: 210,
+                minWidth: 250,
               }}
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
-
               <div style={{ marginBottom: 4 }}>
                 Build: <b>{BUILD_TEST_ID}</b>
               </div>
-
               <div>
                 Fixes: <b>{fixCount}</b> {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
               </div>
               <div>
-                Acc:{" "}
-                <b>{pos?.accuracyMeters != null ? `${Math.round(pos.accuracyMeters)}m` : "—"}</b>
+                Acc: <b>{pos?.accuracyMeters != null ? `${Math.round(pos.accuracyMeters)}m` : "—"}</b>
+              </div>
+              <div>
+                Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
+              </div>
+              <div>
+                Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
+              </div>
+              <div>
+                t: <b>{projDebug?.t != null ? projDebug.t.toFixed(3) : "—"}</b>
+              </div>
+              <div>
+                perp yd raw: <b>{projDebug?.rawPerpYards != null ? projDebug.rawPerpYards.toFixed(1) : "—"}</b>
+              </div>
+              <div>
+                perp yd clamped: <b>{projDebug?.clampedPerpYards != null ? projDebug.clampedPerpYards.toFixed(1) : "—"}</b>
               </div>
               <div>
                 Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
               </div>
             </div>
 
+            {/* HOME + SETUP */}
             <button
               onClick={goHome}
               style={{
                 position: "fixed",
                 left: 10,
-                top: 40,
-                width: 92,
-                height: 44,
+                top: TOP_BTN_TOP,
+                width: TOP_BTN_W,
+                height: TOP_BTN_H,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -800,9 +729,9 @@ export default function App() {
               style={{
                 position: "fixed",
                 right: 10,
-                top: 40,
-                width: 92,
-                height: 44,
+                top: TOP_BTN_TOP,
+                width: TOP_BTN_W,
+                height: TOP_BTN_H,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -847,11 +776,7 @@ export default function App() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    overlayActionsRef.current?.saveDefaults?.();
-                    const st = overlayActionsRef.current?.getState?.();
-                    if (st?.A && st?.C) setBaselineAC({ A: st.A, C: st.C });
-                  }}
+                  onClick={handleSaveDefaults}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
@@ -866,7 +791,7 @@ export default function App() {
                 </button>
 
                 <button
-                  onClick={() => overlayActionsRef.current?.clearTarget?.()}
+                  onClick={handleClearTarget}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
@@ -898,13 +823,14 @@ export default function App() {
             )}
           </div>
 
+          {/* Footer */}
           <div
             style={{
               position: "fixed",
               left: 0,
               right: 0,
               bottom: 0,
-              height: FOOTER_H,
+              height: 60,
               background: "white",
               color: "black",
               borderTop: "1px solid #ddd",
@@ -918,7 +844,7 @@ export default function App() {
             }}
           >
             <button
-              onClick={() => setIdx((v) => clamp(v - 1, 0, Math.max(0, roundHoles.length - 1)))}
+              onClick={prevHole}
               disabled={idx === 0}
               style={{
                 width: 60,
@@ -935,36 +861,21 @@ export default function App() {
               {"<"}
             </button>
 
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                minWidth: 270,
-                justifyContent: "center",
-              }}
-            >
-              <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>
-                {hole?.displayHole != null ? String(hole.displayHole).padStart(2, "0") : "—"}
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 270, justifyContent: "center" }}>
+              <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>{holeNumberText}</div>
 
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   You→Green {youToGreenYards ?? "—"} yd
                 </div>
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
-                  {`Par ${
-                    typeof hole?.par === "number"
-                      ? hole.par
-                      : defaultParForHole(hole?.displayHole || hole?.hole || 1)
-                  }`}{" "}
-                  • {`SI ${typeof hole?.hcp === "number" ? hole.hcp : "—"}`}
+                  {parText} • {siText}
                 </div>
               </div>
             </div>
 
             <button
-              onClick={() => setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)))}
+              onClick={nextHole}
               disabled={idx === roundHoles.length - 1}
               style={{
                 width: 60,
