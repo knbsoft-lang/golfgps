@@ -65,33 +65,55 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
-// Progress along tee->green (GPS) then map to A->C (overlay).
-// This is 1D along the hole line (Phase 3). Accuracy ring + smoothing are in HoleOverlay.
+/**
+ * Bearing-based projection (great-circle-ish) to compute progress along Tee->Green.
+ * This is more stable than flat XY and reduces PC vs Tablet drift.
+ *
+ * Returns t in [0..1]
+ */
 function projectAlongTeeGreen(tee, green, pos) {
   if (!tee || !green || !pos) return null;
 
-  const R = 6371000;
-  const lat0 = (tee.lat * Math.PI) / 180;
+  const toRad = (d) => (d * Math.PI) / 180;
 
-  const toXY = (p) => {
-    const lat = (p.lat * Math.PI) / 180;
-    const lon = (p.lon * Math.PI) / 180;
-    const lon0 = (tee.lon * Math.PI) / 180;
-    return {
-      x: (lon - lon0) * Math.cos(lat0) * R,
-      y: (lat - lat0) * R,
-    };
+  // Bearing from point 1 to point 2, in radians (-pi..pi)
+  const bearingRad = (p1, p2) => {
+    const lat1 = toRad(p1.lat);
+    const lat2 = toRad(p2.lat);
+    const dLon = toRad(p2.lon - p1.lon);
+
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x =
+      Math.cos(lat1) * Math.sin(lat2) -
+      Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+    return Math.atan2(y, x);
   };
 
-  const G = toXY(green);
-  const P = toXY(pos);
+  // Smallest signed angle difference a-b in radians (-pi..pi)
+  const angleDiff = (a, b) => {
+    let d = a - b;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    return d;
+  };
 
-  const vx = G.x;
-  const vy = G.y;
-  const denom = vx * vx + vy * vy;
-  if (denom < 0.0001) return 0;
+  // Distances in meters (haversine)
+  const dTG = haversineMeters(tee, green);
+  if (!isFinite(dTG) || dTG < 0.5) return 0;
 
-  const t = (P.x * vx + P.y * vy) / denom;
+  const dTP = haversineMeters(tee, pos);
+  if (!isFinite(dTP) || dTP < 0) return 0;
+
+  const brgTG = bearingRad(tee, green);
+  const brgTP = bearingRad(tee, pos);
+
+  // Along-track distance (meters) along the tee->green direction
+  // using simple projection of dTP onto the direction difference.
+  const dAng = angleDiff(brgTG, brgTP);
+  const along = dTP * Math.cos(dAng);
+
+  const t = along / dTG;
   return Math.max(0, Math.min(1, t));
 }
 
@@ -256,7 +278,10 @@ export default function App() {
 
   const holeKey =
     hole && clubKey
-      ? `${clubKey.replace(/\s+/g, "")}-${hole.nine}-${String(hole.hole).padStart(2, "0")}`
+      ? `${clubKey.replace(/\s+/g, "")}-${hole.nine}-${String(hole.hole).padStart(
+          2,
+          "0"
+        )}`
       : "";
 
   // ========= GPS =========
@@ -293,13 +318,8 @@ export default function App() {
       opts
     );
 
-    // extra poll keeps some Android devices updating smoothly in PWAs
     pollTimerRef.current = setInterval(() => {
-      navigator.geolocation.getCurrentPosition(
-        (p) => applyFix(p),
-        () => {},
-        opts
-      );
+      navigator.geolocation.getCurrentPosition((p) => applyFix(p), () => {}, opts);
     }, 1000);
 
     return () => {
