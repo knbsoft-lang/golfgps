@@ -12,6 +12,10 @@ const HIT_A = 46;
 const HIT_B = 54;
 const HIT_C = 46;
 
+// ✅ Ring scale adjustment
+// You asked: “make accuracy ring larger by 25%”
+const ACCURACY_RING_SCALE = 1.25;
+
 function normPoint(p, fallback) {
   if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
   return { x: clamp01(p.x), y: clamp01(p.y) };
@@ -43,18 +47,21 @@ function closestPointOnSegment(P, A, B) {
 }
 
 // Map accuracy meters to a "visual ring radius" in pixels.
-// We scale it down ~65% by multiplying by 0.35.
+// We had scaled it down ~65% (x0.35). Now we make that ring 25% bigger.
 function ringPxFromAccuracy(accuracyMeters) {
   if (typeof accuracyMeters !== "number" || !isFinite(accuracyMeters)) return 10;
 
   const m = Math.max(1, Math.min(30, accuracyMeters)); // clamp 1..30m
 
-  // Original visual scale:
-  // 1m => ~10px, 30m => ~60px
+  // Base visual scale:
+  // 1m => ~8px, 30m => ~60px
   const base = 8 + (m - 1) * (52 / 29);
 
-  // Make it ~65% smaller:
-  const scaled = base * 0.35;
+  // Previous shrink:
+  const shrunk = base * 0.35;
+
+  // ✅ Now +25%
+  const scaled = shrunk * ACCURACY_RING_SCALE;
 
   // Keep a sensible minimum so you can still see it
   return Math.max(6, scaled);
@@ -363,7 +370,7 @@ export default function HoleOverlay({
         )}
       </svg>
 
-      {/* YOU DOT + SMALLER ACCURACY RING */}
+      {/* YOU DOT + ACCURACY RING (now 25% larger) */}
       {youSmooth && (
         <div
           style={{

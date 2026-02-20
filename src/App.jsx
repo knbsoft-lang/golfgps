@@ -18,6 +18,10 @@ function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
 
+function clamp01(n) {
+  return Math.max(0, Math.min(1, n));
+}
+
 function distNorm(p1, p2) {
   const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
   const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
@@ -60,34 +64,52 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
-// Progress along tee->green (GPS) then map to A->C (overlay).
-// This is 1D along the hole line (Phase 3). Accuracy ring + smoothing are in HoleOverlay.
-function projectAlongTeeGreen(tee, green, pos) {
+/**
+ * Project GPS position P relative to Tee->Green line in local meters.
+ * Returns:
+ *  - t: 0..1 progress along tee->green
+ *  - perpMeters: signed meters left/right of the tee->green line
+ *
+ * Sign convention:
+ *  +perpMeters = left of the line when facing from Tee toward Green
+ *  -perpMeters = right of the line
+ */
+function projectTeeGreen2D(tee, green, pos) {
   if (!tee || !green || !pos) return null;
 
-  const R = 6371000;
+  const R = 6371000; // meters
   const lat0 = (tee.lat * Math.PI) / 180;
+  const lon0 = (tee.lon * Math.PI) / 180;
 
   const toXY = (p) => {
     const lat = (p.lat * Math.PI) / 180;
     const lon = (p.lon * Math.PI) / 180;
-    const lon0 = (tee.lon * Math.PI) / 180;
     return {
       x: (lon - lon0) * Math.cos(lat0) * R,
       y: (lat - lat0) * R,
     };
   };
 
-  const G = toXY(green);
-  const P = toXY(pos);
+  const G = toXY(green); // from tee origin
+  const P = toXY(pos);   // from tee origin
 
   const vx = G.x;
   const vy = G.y;
-  const denom = vx * vx + vy * vy;
-  if (denom < 0.0001) return 0;
+  const len = Math.hypot(vx, vy);
+  if (len < 0.01) return null;
 
-  const t = (P.x * vx + P.y * vy) / denom;
-  return Math.max(0, Math.min(1, t));
+  const ux = vx / len;
+  const uy = vy / len;
+
+  // progress along the line
+  const s = P.x * ux + P.y * uy; // meters
+  const t = clamp01(s / len);
+
+  // perpendicular signed distance (left/right)
+  // v = (-uy, ux)
+  const perpMeters = P.x * (-uy) + P.y * (ux);
+
+  return { t, perpMeters };
 }
 
 function ArrowYardBox({ top, yards, left = 0 }) {
@@ -419,22 +441,78 @@ export default function App() {
   // ✅ YOU dot: only show if reasonably near the hole
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
+  // ✅ NEW: Side-to-side tuning knobs (because hole images aren’t perfect maps)
+  // Start here:
+  // - If dot doesn’t move sideways enough: increase PERP_SCALE
+  // - If dot moves sideways too much: decrease PERP_SCALE
+  const PERP_SCALE = 0.85;
+
+  // Clamp sideways influence so GPS noise doesn’t throw dot off-screen
+  const MAX_PERP_YARDS = 60;
+
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
 
-    if (typeof youToHoleYards === "number" && youToHoleYards > YOU_SHOW_WITHIN_YARDS) {
+    if (
+      typeof youToHoleYards === "number" &&
+      youToHoleYards > YOU_SHOW_WITHIN_YARDS
+    ) {
       return null;
     }
 
-    const t = projectAlongTeeGreen(hole.tee, hole.green, pos);
-    if (typeof t !== "number") return null;
+    // Need this so we can convert sideways meters -> overlay norm units
+    if (!yardsPerNormUnit || !baselineLen) {
+      // fallback to old behavior (along the line only)
+      const proj = projectTeeGreen2D(hole.tee, hole.green, pos);
+      if (!proj) return null;
 
-    return {
-      x: A.x + (C.x - A.x) * t,
-      y: A.y + (C.y - A.y) * t,
-    };
-  }, [hole, pos, A, C, youToHoleYards]);
+      const t = proj.t;
+      return {
+        x: A.x + (C.x - A.x) * t,
+        y: A.y + (C.y - A.y) * t,
+      };
+    }
+
+    const proj = projectTeeGreen2D(hole.tee, hole.green, pos);
+    if (!proj) return null;
+
+    const t = proj.t;
+
+    // Base point along overlay A->C
+    const baseX = A.x + (C.x - A.x) * t;
+    const baseY = A.y + (C.y - A.y) * t;
+
+    // Convert perpendicular meters -> perpendicular yards
+    let perpYards = metersToYards(proj.perpMeters) * PERP_SCALE;
+    perpYards = Math.max(-MAX_PERP_YARDS, Math.min(MAX_PERP_YARDS, perpYards));
+
+    // Convert perpendicular yards -> overlay "norm units"
+    // (same scale as yardage modeling along the line)
+    const perpNorm = perpYards / yardsPerNormUnit;
+
+    // Perpendicular unit vector in overlay space
+    const dx = C.x - A.x;
+    const dy = C.y - A.y;
+    const len = Math.hypot(dx, dy);
+
+    if (len < 0.0001) {
+      return { x: baseX, y: baseY };
+    }
+
+    const ux = dx / len;
+    const uy = dy / len;
+
+    // left perpendicular
+    const px = -uy;
+    const py = ux;
+
+    // Apply sideways offset
+    const outX = clamp01(baseX + px * perpNorm);
+    const outY = clamp01(baseY + py * perpNorm);
+
+    return { x: outX, y: outY };
+  }, [hole, pos, A, C, youToHoleYards, yardsPerNormUnit, baselineLen]);
 
   // Layout constants
   const FOOTER_H = 60;
@@ -665,7 +743,9 @@ export default function App() {
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AC}
-                yards={typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards}
+                yards={
+                  typeof modeledTotalYards === "number" ? modeledTotalYards : teeToGreenYards
+                }
               />
             )}
             {showTargetBoxes && (
@@ -694,7 +774,7 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG (optional but helpful) */}
+            {/* GPS DEBUG */}
             <div
               style={{
                 position: "fixed",
@@ -730,9 +810,9 @@ export default function App() {
               style={{
                 position: "fixed",
                 left: 10,
-                top: TOP_BTN_TOP,
-                width: TOP_BTN_W,
-                height: TOP_BTN_H,
+                top: 40,
+                width: 92,
+                height: 44,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -750,9 +830,9 @@ export default function App() {
               style={{
                 position: "fixed",
                 right: 10,
-                top: TOP_BTN_TOP,
-                width: TOP_BTN_W,
-                height: TOP_BTN_H,
+                top: 40,
+                width: 92,
+                height: 44,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -852,7 +932,7 @@ export default function App() {
               left: 0,
               right: 0,
               bottom: 0,
-              height: FOOTER_H,
+              height: 60,
               background: "white",
               color: "black",
               borderTop: "1px solid #ddd",
