@@ -763,6 +763,13 @@ export default function App() {
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
 
+		<div>
+  Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
+</div>
+<div>
+  Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
+</div>
+
               <div style={{ marginBottom: 4 }}>
   Sync: <b>{TEST_SYNC_ID}</b>
 </div>
