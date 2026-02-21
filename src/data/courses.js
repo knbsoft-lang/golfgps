@@ -70,7 +70,7 @@ export const BROAD_STRIPES = {
       { hole: 6, par: 3, hcp: 17, tee: { lat: 28.962392, lon: -81.946686 }, green: { lat: 28.963114, lon: -81.947414 } },
       { hole: 7, par: 4, hcp: 11, tee: { lat: 28.963619, lon: -81.946822 }, green: { lat: 28.963997, lon: -81.949842 } },
       { hole: 8, par: 4, hcp: 3, tee: { lat: 28.963192, lon: -81.950492 }, green: { lat: 28.963831, lon: -81.953725 } },
-      { hole: 9, par: 5, hcp: 1, tee: { lat: 28.963581, lon: -81.955575 }, green: { lat: 28.966036, lon: -81.959533 } },
+      { hole: 9, par: 5, hcp: 1, tee: { lat: 28.963726, lon: -81.955847 }, green: { lat: 28.966070, lon: -81.959551 } },
     ],
 
     // Back nine stored as holes 1..9 so it matches /Back/hole01.png..hole09.png
