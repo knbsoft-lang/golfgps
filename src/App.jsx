@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-12";
+const TEST_SYNC_ID = "TEST-05";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 // Requires the vite.config.js change that defines __BUILD_ID__
@@ -80,7 +80,6 @@ function projectAlongTeeGreen(tee, green, pos) {
 
   const toRad = (d) => (d * Math.PI) / 180;
 
-  // Bearing from point 1 to point 2, in radians (-pi..pi)
   const bearingRad = (p1, p2) => {
     const lat1 = toRad(p1.lat);
     const lat2 = toRad(p2.lat);
@@ -94,7 +93,6 @@ function projectAlongTeeGreen(tee, green, pos) {
     return Math.atan2(y, x);
   };
 
-  // Smallest signed angle difference a-b in radians (-pi..pi)
   const angleDiff = (a, b) => {
     let d = a - b;
     while (d > Math.PI) d -= 2 * Math.PI;
@@ -102,7 +100,6 @@ function projectAlongTeeGreen(tee, green, pos) {
     return d;
   };
 
-  // Distances in meters (haversine)
   const dTG = haversineMeters(tee, green);
   if (!isFinite(dTG) || dTG < 0.5) return 0;
 
@@ -121,13 +118,12 @@ function projectAlongTeeGreen(tee, green, pos) {
 
 /**
  * Cross-track (left/right) calculation using a local flat approximation near the tee.
- * - Returns signed cross-track meters: +RIGHT, -LEFT (relative to tee->green direction)
+ * Returns signed cross-track meters: +RIGHT, -LEFT (relative to tee->green direction)
  */
 function crossTrackMetersRightPositive(tee, green, pos) {
   if (!tee || !green || !pos) return null;
 
-  // Local tangent plane (equirectangular) around tee
-  const R = 6371000; // Earth radius meters
+  const R = 6371000;
   const toRad = (d) => (d * Math.PI) / 180;
 
   const lat0 = toRad(tee.lat);
@@ -136,9 +132,8 @@ function crossTrackMetersRightPositive(tee, green, pos) {
   const dLatP = toRad(pos.lat - tee.lat);
   const dLonP = toRad(pos.lon - tee.lon);
 
-  // x east, y north (meters)
-  const ACx = dLonG * Math.cos(lat0) * R;
-  const ACy = dLatG * R;
+  const ACx = dLonG * Math.cos(lat0) * R; // east
+  const ACy = dLatG * R; // north
 
   const APx = dLonP * Math.cos(lat0) * R;
   const APy = dLatP * R;
@@ -146,12 +141,8 @@ function crossTrackMetersRightPositive(tee, green, pos) {
   const len = Math.hypot(ACx, ACy);
   if (!isFinite(len) || len < 0.5) return null;
 
-  // z = AC x AP (2D cross product magnitude with sign)
-  // If z > 0 => AP is LEFT of AC (standard math orientation)
-  const z = ACx * APy - ACy * APx;
-
-  // We want +RIGHT, -LEFT => flip the sign
-  const crossMeters = -z / len;
+  const z = ACx * APy - ACy * APx; // + => LEFT in math coords
+  const crossMeters = -z / len; // flip => +RIGHT
 
   return crossMeters;
 }
@@ -487,25 +478,35 @@ export default function App() {
   // ✅ YOU dot: only show if reasonably near the hole
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
-  // ✅ Cross-track visual scaling (calibration placeholder)
-  // If dot shifts too far, lower this (ex: 0.35). If too subtle, raise it.
-  const CROSS_VISUAL_SCALE = 1.0;
+  // ✅ Cross-track calibration
+  // We scale raw cross-track so it matches the static hole image better.
+  // Based on your office test: raw ~146 yd but reality ~60 yd => 0.41
+  const CROSS_YARDS_SCALE = 0.41;
 
   // ✅ Toggle: Offset dot left/right
   const [crossOffsetOn, setCrossOffsetOn] = useState(true);
 
-  // ✅ Cross-track yards (signed): +RIGHT, -LEFT
-  const crossTrackYardsSigned = useMemo(() => {
+  // ✅ Raw cross-track yards (signed): +RIGHT, -LEFT
+  const crossTrackYardsRawSigned = useMemo(() => {
     if (!hole || !pos) return null;
     const crossM = crossTrackMetersRightPositive(hole.tee, hole.green, pos);
     if (typeof crossM !== "number" || !isFinite(crossM)) return null;
 
-    const yd = metersToYards(crossM);
-    const ydRounded = Math.round(yd);
-
+    const ydRaw = metersToYards(crossM);
+    const ydRounded = Math.round(ydRaw);
     if (Math.abs(ydRounded) <= 1) return 0;
     return ydRounded;
   }, [hole, pos]);
+
+  // ✅ Scaled cross-track (what we DISPLAY and what we OFFSET by)
+  const crossTrackYardsSigned = useMemo(() => {
+    if (crossTrackYardsRawSigned == null) return null;
+    if (crossTrackYardsRawSigned === 0) return 0;
+
+    const scaled = Math.round(crossTrackYardsRawSigned * CROSS_YARDS_SCALE);
+    if (Math.abs(scaled) <= 1) return 0;
+    return scaled;
+  }, [crossTrackYardsRawSigned]);
 
   const crossTrackText = useMemo(() => {
     if (crossTrackYardsSigned == null) return "—";
@@ -515,14 +516,21 @@ export default function App() {
     return `${sign}${Math.abs(crossTrackYardsSigned)} yd (${side})`;
   }, [crossTrackYardsSigned]);
 
-  // ✅ Show exactly what offset we USED (so we can debug calibration)
+  const crossTrackRawText = useMemo(() => {
+    if (crossTrackYardsRawSigned == null) return "—";
+    if (crossTrackYardsRawSigned === 0) return "0 yd";
+    const side = crossTrackYardsRawSigned > 0 ? "RIGHT" : "LEFT";
+    const sign = crossTrackYardsRawSigned > 0 ? "+" : "−";
+    return `${sign}${Math.abs(crossTrackYardsRawSigned)} yd (${side})`;
+  }, [crossTrackYardsRawSigned]);
+
   const offsetUsedYards = useMemo(() => {
     if (!crossOffsetOn) return 0;
     if (typeof crossTrackYardsSigned !== "number") return 0;
     return crossTrackYardsSigned;
   }, [crossOffsetOn, crossTrackYardsSigned]);
 
-  // ✅ YOU dot position (now with optional cross-track offset)
+  // ✅ YOU dot position (with optional calibrated cross-track offset)
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
@@ -534,11 +542,9 @@ export default function App() {
       return null;
     }
 
-    // Along-track t (stable)
     const t = projectAlongTeeGreen(hole.tee, hole.green, pos);
     if (typeof t !== "number") return null;
 
-    // Base point on centerline in overlay space
     const base = {
       x: A.x + (C.x - A.x) * t,
       y: A.y + (C.y - A.y) * t,
@@ -549,22 +555,16 @@ export default function App() {
     if (!yardsPerNormUnit) return base;
     if (typeof crossTrackYardsSigned !== "number") return base;
 
-    // Vector A->C in overlay normalized coords
     const dx = C.x - A.x;
     const dy = C.y - A.y;
     const len = Math.hypot(dx, dy);
     if (!isFinite(len) || len < 0.0001) return base;
 
-    // ✅ FIXED: Right-hand perpendicular for SCREEN coordinates (x right, y down)
-    // Right-perp = (-dy, dx)  (clockwise in screen-y-down)
+    // Right-perp for screen coords (x right, y down)
     const perpRight = { x: -dy / len, y: dx / len };
 
-    // Convert yards => normalized distance
     const normUnitsPerYard = 1 / yardsPerNormUnit;
-
-    // Positive cross = RIGHT => move in perpRight direction
-    const offsetNorm =
-      crossTrackYardsSigned * normUnitsPerYard * CROSS_VISUAL_SCALE;
+    const offsetNorm = crossTrackYardsSigned * normUnitsPerYard;
 
     const out = {
       x: clamp01(base.x + perpRight.x * offsetNorm),
@@ -814,7 +814,7 @@ export default function App() {
             }}
           >
             {/* Arrow boxes */}
-            {!Bactive && (
+            {showGreenOnlyBox && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AC}
@@ -825,14 +825,14 @@ export default function App() {
                 }
               />
             )}
-            {Bactive && (
+            {showTargetBoxes && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_BC}
                 yards={targetToGreenYards}
               />
             )}
-            {Bactive && (
+            {showTargetBoxes && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AB}
@@ -874,7 +874,7 @@ export default function App() {
                 zIndex: 10002,
                 pointerEvents: "auto",
                 userSelect: "none",
-                minWidth: 250,
+                minWidth: 265,
               }}
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
@@ -889,7 +889,6 @@ export default function App() {
               <div style={{ marginBottom: 4 }}>
                 Sync: <b>{TEST_SYNC_ID}</b>
               </div>
-
               <div style={{ marginBottom: 4 }}>
                 Build: <b>{BUILD_TEST_ID}</b>
               </div>
@@ -922,15 +921,20 @@ export default function App() {
               </div>
 
               <div>
+                Tee→Green: <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
+              </div>
+
+              <div>
                 Cross: <b>{crossTrackText}</b>
               </div>
+              <div style={{ opacity: 0.85 }}>
+                Cross raw: <b>{crossTrackRawText}</b> • scale{" "}
+                <b>{CROSS_YARDS_SCALE}</b>
+              </div>
+
               <div>
                 Offset Used:{" "}
-                <b>
-                  {crossOffsetOn
-                    ? `${Math.abs(offsetUsedYards)} yd`
-                    : "OFF"}
-                </b>
+                <b>{crossOffsetOn ? `${Math.abs(offsetUsedYards)} yd` : "OFF"}</b>
               </div>
 
               <div style={{ marginTop: 6 }}>
