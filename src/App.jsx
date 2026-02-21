@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-08";
+const TEST_SYNC_ID = "TEST-09";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 // Requires the vite.config.js change that defines __BUILD_ID__
@@ -122,7 +122,6 @@ function projectAlongTeeGreen(tee, green, pos) {
 /**
  * Cross-track (left/right) calculation using a local flat approximation near the tee.
  * - Returns signed cross-track meters: +RIGHT, -LEFT (relative to tee->green direction)
- * - Also returns local along-track meters (not used for t; we still use bearing-t for stability)
  */
 function crossTrackMetersRightPositive(tee, green, pos) {
   if (!tee || !green || !pos) return null;
@@ -489,9 +488,10 @@ export default function App() {
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
   // ✅ Cross-track visual scaling (calibration placeholder)
-  // 1.0 means "use yardsPerNormUnit directly".
-  // If dot shifts too far, lower this (ex: 0.35). If too subtle, raise it.
   const CROSS_VISUAL_SCALE = 1.0;
+
+  // ✅ NEW: allow larger left/right offset than before (fixes 145yd getting stuck ~125yd)
+  const MAX_CROSS_OFFSET_YARDS = 250;
 
   // ✅ Toggle: Offset dot left/right
   const [crossOffsetOn, setCrossOffsetOn] = useState(true);
@@ -502,7 +502,6 @@ export default function App() {
     const crossM = crossTrackMetersRightPositive(hole.tee, hole.green, pos);
     if (typeof crossM !== "number" || !isFinite(crossM)) return null;
 
-    // Keep sign, round to nearest yard
     const yd = metersToYards(crossM);
     const ydRounded = Math.round(yd);
 
@@ -520,7 +519,17 @@ export default function App() {
     return `${sign}${Math.abs(crossTrackYardsSigned)} yd (${side})`;
   }, [crossTrackYardsSigned]);
 
-  // ✅ YOU dot position (now with optional cross-track offset)
+  // ✅ NEW: clamped cross value used for the DOT (prevents “stuck 125yd” behavior)
+  const crossClampedYards = useMemo(() => {
+    if (typeof crossTrackYardsSigned !== "number") return null;
+    return clamp(
+      crossTrackYardsSigned,
+      -MAX_CROSS_OFFSET_YARDS,
+      MAX_CROSS_OFFSET_YARDS
+    );
+  }, [crossTrackYardsSigned]);
+
+  // ✅ YOU dot position (with optional cross-track offset)
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
@@ -547,7 +556,7 @@ export default function App() {
 
     // Need overlay scale to convert yards => normalized units
     if (!yardsPerNormUnit) return base;
-    if (typeof crossTrackYardsSigned !== "number") return base;
+    if (typeof crossClampedYards !== "number") return base;
 
     // Compute perpendicular (RIGHT side) in overlay normalized coordinates
     const dx = C.x - A.x;
@@ -562,15 +571,13 @@ export default function App() {
     // Convert yards => normalized distance
     const normUnitsPerYard = 1 / yardsPerNormUnit;
 
-    const offsetNorm =
-      -crossTrackYardsSigned * normUnitsPerYard * CROSS_VISUAL_SCALE;
+    // ✅ KEEP this minus sign (fixes the “mirrored left/right” you observed)
+    const offsetNorm = -crossClampedYards * normUnitsPerYard * CROSS_VISUAL_SCALE;
 
-    const out = {
+    return {
       x: clamp01(base.x + perpRight.x * offsetNorm),
       y: clamp01(base.y + perpRight.y * offsetNorm),
     };
-
-    return out;
   }, [
     hole,
     pos,
@@ -578,15 +585,12 @@ export default function App() {
     C,
     youToHoleYards,
     crossOffsetOn,
-    crossTrackYardsSigned,
+    crossClampedYards,
     yardsPerNormUnit,
   ]);
 
   // Layout constants
   const FOOTER_H = 60;
-  const TOP_BTN_TOP = 40;
-  const TOP_BTN_W = 92;
-  const TOP_BTN_H = 44;
 
   // Arrow boxes
   const ARROW_LEFT = 80;
@@ -861,7 +865,7 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG (now includes: build, trust, cross-track + toggle) */}
+            {/* GPS DEBUG */}
             <div
               style={{
                 position: "fixed",
@@ -874,7 +878,7 @@ export default function App() {
                 fontSize: 12,
                 lineHeight: 1.25,
                 zIndex: 10002,
-                pointerEvents: "auto", // ✅ needed for checkbox click
+                pointerEvents: "auto",
                 userSelect: "none",
                 minWidth: 230,
               }}
@@ -923,12 +927,20 @@ export default function App() {
                 </b>
               </div>
 
-              {/* ✅ NEW: Cross-track */}
               <div>
                 Cross: <b>{crossTrackText}</b>
               </div>
 
-              {/* ✅ NEW: Toggle dot offset */}
+              {/* ✅ NEW: shows if the dot is clamped */}
+              <div>
+                Offset used:{" "}
+                <b>
+                  {typeof crossClampedYards === "number"
+                    ? `${Math.round(crossClampedYards)} yd`
+                    : "—"}
+                </b>
+              </div>
+
               <div style={{ marginTop: 6 }}>
                 <label
                   style={{
@@ -951,6 +963,10 @@ export default function App() {
               <div style={{ marginTop: 4, opacity: 0.85 }}>
                 Near hole:{" "}
                 <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
+              </div>
+
+              <div style={{ marginTop: 4, opacity: 0.85 }}>
+                Max offset: <b>{MAX_CROSS_OFFSET_YARDS} yd</b>
               </div>
             </div>
 
