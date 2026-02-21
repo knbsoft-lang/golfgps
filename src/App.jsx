@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-09";
+const TEST_SYNC_ID = "TEST-08";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 // Requires the vite.config.js change that defines __BUILD_ID__
@@ -488,10 +488,8 @@ export default function App() {
   const YOU_SHOW_WITHIN_YARDS = 1200;
 
   // ✅ Cross-track visual scaling (calibration placeholder)
+  // If dot shifts too far, lower this (ex: 0.35). If too subtle, raise it.
   const CROSS_VISUAL_SCALE = 1.0;
-
-  // ✅ NEW: allow larger left/right offset than before (fixes 145yd getting stuck ~125yd)
-  const MAX_CROSS_OFFSET_YARDS = 250;
 
   // ✅ Toggle: Offset dot left/right
   const [crossOffsetOn, setCrossOffsetOn] = useState(true);
@@ -505,9 +503,7 @@ export default function App() {
     const yd = metersToYards(crossM);
     const ydRounded = Math.round(yd);
 
-    // Small noise clamp: if within +/- 1 yd, show 0
     if (Math.abs(ydRounded) <= 1) return 0;
-
     return ydRounded;
   }, [hole, pos]);
 
@@ -519,17 +515,14 @@ export default function App() {
     return `${sign}${Math.abs(crossTrackYardsSigned)} yd (${side})`;
   }, [crossTrackYardsSigned]);
 
-  // ✅ NEW: clamped cross value used for the DOT (prevents “stuck 125yd” behavior)
-  const crossClampedYards = useMemo(() => {
-    if (typeof crossTrackYardsSigned !== "number") return null;
-    return clamp(
-      crossTrackYardsSigned,
-      -MAX_CROSS_OFFSET_YARDS,
-      MAX_CROSS_OFFSET_YARDS
-    );
-  }, [crossTrackYardsSigned]);
+  // ✅ Show exactly what offset we USED (so we can debug calibration)
+  const offsetUsedYards = useMemo(() => {
+    if (!crossOffsetOn) return 0;
+    if (typeof crossTrackYardsSigned !== "number") return 0;
+    return crossTrackYardsSigned;
+  }, [crossOffsetOn, crossTrackYardsSigned]);
 
-  // ✅ YOU dot position (with optional cross-track offset)
+  // ✅ YOU dot position (now with optional cross-track offset)
   const youNorm = useMemo(() => {
     if (!hole || !pos) return null;
     if (!A || !C) return null;
@@ -551,33 +544,34 @@ export default function App() {
       y: A.y + (C.y - A.y) * t,
     };
 
-    // If no offset requested, return centerline point
     if (!crossOffsetOn) return base;
 
-    // Need overlay scale to convert yards => normalized units
     if (!yardsPerNormUnit) return base;
-    if (typeof crossClampedYards !== "number") return base;
+    if (typeof crossTrackYardsSigned !== "number") return base;
 
-    // Compute perpendicular (RIGHT side) in overlay normalized coordinates
+    // Vector A->C in overlay normalized coords
     const dx = C.x - A.x;
     const dy = C.y - A.y;
     const len = Math.hypot(dx, dy);
     if (!isFinite(len) || len < 0.0001) return base;
 
-    // Right-hand perpendicular in screen coords (x right, y down):
-    // clockwise rotation => (dy, -dx)
-    const perpRight = { x: dy / len, y: -dx / len };
+    // ✅ FIXED: Right-hand perpendicular for SCREEN coordinates (x right, y down)
+    // Right-perp = (-dy, dx)  (clockwise in screen-y-down)
+    const perpRight = { x: -dy / len, y: dx / len };
 
     // Convert yards => normalized distance
     const normUnitsPerYard = 1 / yardsPerNormUnit;
 
-    // ✅ KEEP this minus sign (fixes the “mirrored left/right” you observed)
-    const offsetNorm = -crossClampedYards * normUnitsPerYard * CROSS_VISUAL_SCALE;
+    // Positive cross = RIGHT => move in perpRight direction
+    const offsetNorm =
+      crossTrackYardsSigned * normUnitsPerYard * CROSS_VISUAL_SCALE;
 
-    return {
+    const out = {
       x: clamp01(base.x + perpRight.x * offsetNorm),
       y: clamp01(base.y + perpRight.y * offsetNorm),
     };
+
+    return out;
   }, [
     hole,
     pos,
@@ -585,7 +579,7 @@ export default function App() {
     C,
     youToHoleYards,
     crossOffsetOn,
-    crossClampedYards,
+    crossTrackYardsSigned,
     yardsPerNormUnit,
   ]);
 
@@ -820,7 +814,7 @@ export default function App() {
             }}
           >
             {/* Arrow boxes */}
-            {showGreenOnlyBox && (
+            {!Bactive && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AC}
@@ -831,14 +825,14 @@ export default function App() {
                 }
               />
             )}
-            {showTargetBoxes && (
+            {Bactive && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_BC}
                 yards={targetToGreenYards}
               />
             )}
-            {showTargetBoxes && (
+            {Bactive && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AB}
@@ -880,7 +874,7 @@ export default function App() {
                 zIndex: 10002,
                 pointerEvents: "auto",
                 userSelect: "none",
-                minWidth: 230,
+                minWidth: 250,
               }}
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
@@ -930,14 +924,12 @@ export default function App() {
               <div>
                 Cross: <b>{crossTrackText}</b>
               </div>
-
-              {/* ✅ NEW: shows if the dot is clamped */}
               <div>
-                Offset used:{" "}
+                Offset Used:{" "}
                 <b>
-                  {typeof crossClampedYards === "number"
-                    ? `${Math.round(crossClampedYards)} yd`
-                    : "—"}
+                  {crossOffsetOn
+                    ? `${Math.abs(offsetUsedYards)} yd`
+                    : "OFF"}
                 </b>
               </div>
 
@@ -963,10 +955,6 @@ export default function App() {
               <div style={{ marginTop: 4, opacity: 0.85 }}>
                 Near hole:{" "}
                 <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
-              </div>
-
-              <div style={{ marginTop: 4, opacity: 0.85 }}>
-                Max offset: <b>{MAX_CROSS_OFFSET_YARDS} yd</b>
               </div>
             </div>
 
