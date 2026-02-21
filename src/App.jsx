@@ -563,7 +563,7 @@ export default function App() {
     const normUnitsPerYard = 1 / yardsPerNormUnit;
 
     const offsetNorm =
-      crossTrackYardsSigned * normUnitsPerYard * CROSS_VISUAL_SCALE;
+      -crossTrackYardsSigned * normUnitsPerYard * CROSS_VISUAL_SCALE;
 
     const out = {
       x: clamp01(base.x + perpRight.x * offsetNorm),
