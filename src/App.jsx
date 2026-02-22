@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-05";
+const TEST_SYNC_ID = "TEST-06";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 // Requires the vite.config.js change that defines __BUILD_ID__
@@ -564,7 +564,7 @@ export default function App() {
     const perpRight = { x: -dy / len, y: dx / len };
 
     const normUnitsPerYard = 1 / yardsPerNormUnit;
-    const offsetNorm = crossTrackYardsSigned * normUnitsPerYard;
+    const offsetNorm = -crossTrackYardsSigned * normUnitsPerYard;
 
     const out = {
       x: clamp01(base.x + perpRight.x * offsetNorm),
