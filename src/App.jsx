@@ -7,10 +7,9 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-06";
+const TEST_SYNC_ID = "TEST-11";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
-// Requires the vite.config.js change that defines __BUILD_ID__
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
 
@@ -23,7 +22,6 @@ function defaultParForHole(holeNumber) {
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
-
 function clamp01(n) {
   return Math.max(0, Math.min(1, n));
 }
@@ -72,7 +70,6 @@ function buildRound(club, mode, nineA, nineB) {
 
 /**
  * Bearing-based projection (great-circle-ish) to compute progress along Tee->Green.
- *
  * Returns t in [0..1]
  */
 function projectAlongTeeGreen(tee, green, pos) {
@@ -117,8 +114,8 @@ function projectAlongTeeGreen(tee, green, pos) {
 }
 
 /**
- * Cross-track (left/right) calculation using a local flat approximation near the tee.
- * Returns signed cross-track meters: +RIGHT, -LEFT (relative to tee->green direction)
+ * Cross-track using local flat approximation near tee.
+ * Returns signed cross meters: +RIGHT, -LEFT relative to tee->green.
  */
 function crossTrackMetersRightPositive(tee, green, pos) {
   if (!tee || !green || !pos) return null;
@@ -132,8 +129,8 @@ function crossTrackMetersRightPositive(tee, green, pos) {
   const dLatP = toRad(pos.lat - tee.lat);
   const dLonP = toRad(pos.lon - tee.lon);
 
-  const ACx = dLonG * Math.cos(lat0) * R; // east
-  const ACy = dLatG * R; // north
+  const ACx = dLonG * Math.cos(lat0) * R;
+  const ACy = dLatG * R;
 
   const APx = dLonP * Math.cos(lat0) * R;
   const APy = dLatP * R;
@@ -141,7 +138,7 @@ function crossTrackMetersRightPositive(tee, green, pos) {
   const len = Math.hypot(ACx, ACy);
   if (!isFinite(len) || len < 0.5) return null;
 
-  const z = ACx * APy - ACy * APx; // + => LEFT in math coords
+  const z = ACx * APy - ACy * APx; // + => LEFT (math)
   const crossMeters = -z / len; // flip => +RIGHT
 
   return crossMeters;
@@ -149,7 +146,6 @@ function crossTrackMetersRightPositive(tee, green, pos) {
 
 function ArrowYardBox({ top, yards, left = 0 }) {
   const W = 70;
-
   return (
     <div
       style={{
@@ -211,7 +207,7 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
 }
 
 export default function App() {
-  const [page, setPage] = useState("home"); // "home" | "play"
+  const [page, setPage] = useState("home");
 
   const clubKeysAll = Object.keys(COURSE_CATALOG);
 
@@ -445,6 +441,38 @@ export default function App() {
   const Bactive = !!liveOverlay?.Bactive;
   const B = liveOverlay?.B || null;
 
+  // ========= Cross calibration storage =========
+  const crossCalKey = holeKey ? `golfgps_crossCal_${holeKey}` : "";
+  const [crossCalScale, setCrossCalScale] = useState(1.0);
+
+  useEffect(() => {
+    if (!crossCalKey) return;
+    try {
+      const raw = localStorage.getItem(crossCalKey);
+      const v = raw != null ? parseFloat(raw) : NaN;
+      if (isFinite(v) && v > 0.01 && v < 10) setCrossCalScale(v);
+      else setCrossCalScale(1.0);
+    } catch {
+      setCrossCalScale(1.0);
+    }
+  }, [crossCalKey]);
+
+  function saveCrossCalScale(v) {
+    if (!crossCalKey) return;
+    try {
+      localStorage.setItem(crossCalKey, String(v));
+    } catch {}
+    setCrossCalScale(v);
+  }
+
+  function resetCrossCal() {
+    if (!crossCalKey) return;
+    try {
+      localStorage.removeItem(crossCalKey);
+    } catch {}
+    setCrossCalScale(1.0);
+  }
+
   const teeToTargetYards = useMemo(() => {
     if (!yardsPerNormUnit) return null;
     if (!A || !B || !Bactive) return null;
@@ -463,7 +491,6 @@ export default function App() {
     if (!Bactive || !B) {
       return roundYards(distNorm(A, C) * yardsPerNormUnit);
     }
-
     return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
@@ -475,72 +502,46 @@ export default function App() {
     return !Bactive;
   }, [Bactive]);
 
-  // ✅ YOU dot: only show if reasonably near the hole
   const YOU_SHOW_WITHIN_YARDS = 1200;
-
-  // ✅ Cross-track calibration
-  // We scale raw cross-track so it matches the static hole image better.
-  // Based on your office test: raw ~146 yd but reality ~60 yd => 0.41
-  const CROSS_YARDS_SCALE = 0.41;
-
-  // ✅ Toggle: Offset dot left/right
   const [crossOffsetOn, setCrossOffsetOn] = useState(true);
 
-  // ✅ Raw cross-track yards (signed): +RIGHT, -LEFT
-  const crossTrackYardsRawSigned = useMemo(() => {
+  const crossRawYardsSigned = useMemo(() => {
     if (!hole || !pos) return null;
     const crossM = crossTrackMetersRightPositive(hole.tee, hole.green, pos);
     if (typeof crossM !== "number" || !isFinite(crossM)) return null;
-
-    const ydRaw = metersToYards(crossM);
-    const ydRounded = Math.round(ydRaw);
-    if (Math.abs(ydRounded) <= 1) return 0;
-    return ydRounded;
+    const yd = metersToYards(crossM);
+    const r = Math.round(yd);
+    if (Math.abs(r) <= 1) return 0;
+    return r;
   }, [hole, pos]);
 
-  // ✅ Scaled cross-track (what we DISPLAY and what we OFFSET by)
-  const crossTrackYardsSigned = useMemo(() => {
-    if (crossTrackYardsRawSigned == null) return null;
-    if (crossTrackYardsRawSigned === 0) return 0;
+  const crossScaledYardsSigned = useMemo(() => {
+    if (crossRawYardsSigned == null) return null;
+    if (crossRawYardsSigned === 0) return 0;
+    const v = Math.round(crossRawYardsSigned * crossCalScale);
+    if (Math.abs(v) <= 1) return 0;
+    return v;
+  }, [crossRawYardsSigned, crossCalScale]);
 
-    const scaled = Math.round(crossTrackYardsRawSigned * CROSS_YARDS_SCALE);
-    if (Math.abs(scaled) <= 1) return 0;
-    return scaled;
-  }, [crossTrackYardsRawSigned]);
+  const crossText = useMemo(() => {
+    if (crossScaledYardsSigned == null) return "—";
+    if (crossScaledYardsSigned === 0) return "0 yd";
+    const side = crossScaledYardsSigned > 0 ? "RIGHT" : "LEFT";
+    const sign = crossScaledYardsSigned > 0 ? "+" : "−";
+    return `${sign}${Math.abs(crossScaledYardsSigned)} yd (${side})`;
+  }, [crossScaledYardsSigned]);
 
-  const crossTrackText = useMemo(() => {
-    if (crossTrackYardsSigned == null) return "—";
-    if (crossTrackYardsSigned === 0) return "0 yd";
-    const side = crossTrackYardsSigned > 0 ? "RIGHT" : "LEFT";
-    const sign = crossTrackYardsSigned > 0 ? "+" : "−";
-    return `${sign}${Math.abs(crossTrackYardsSigned)} yd (${side})`;
-  }, [crossTrackYardsSigned]);
+  const crossRawText = useMemo(() => {
+    if (crossRawYardsSigned == null) return "—";
+    if (crossRawYardsSigned === 0) return "0 yd";
+    const side = crossRawYardsSigned > 0 ? "RIGHT" : "LEFT";
+    const sign = crossRawYardsSigned > 0 ? "+" : "−";
+    return `${sign}${Math.abs(crossRawYardsSigned)} yd (${side})`;
+  }, [crossRawYardsSigned]);
 
-  const crossTrackRawText = useMemo(() => {
-    if (crossTrackYardsRawSigned == null) return "—";
-    if (crossTrackYardsRawSigned === 0) return "0 yd";
-    const side = crossTrackYardsRawSigned > 0 ? "RIGHT" : "LEFT";
-    const sign = crossTrackYardsRawSigned > 0 ? "+" : "−";
-    return `${sign}${Math.abs(crossTrackYardsRawSigned)} yd (${side})`;
-  }, [crossTrackYardsRawSigned]);
-
-  const offsetUsedYards = useMemo(() => {
-    if (!crossOffsetOn) return 0;
-    if (typeof crossTrackYardsSigned !== "number") return 0;
-    return crossTrackYardsSigned;
-  }, [crossOffsetOn, crossTrackYardsSigned]);
-
-  // ✅ YOU dot position (with optional calibrated cross-track offset)
-  const youNorm = useMemo(() => {
-    if (!hole || !pos) return null;
-    if (!A || !C) return null;
-
-    if (
-      typeof youToHoleYards === "number" &&
-      youToHoleYards > YOU_SHOW_WITHIN_YARDS
-    ) {
-      return null;
-    }
+  // Base point on overlay centerline + perpendicular direction (RIGHT)
+  const basePointAndPerp = useMemo(() => {
+    if (!hole || !pos || !A || !C) return null;
 
     const t = projectAlongTeeGreen(hole.tee, hole.green, pos);
     if (typeof t !== "number") return null;
@@ -550,43 +551,108 @@ export default function App() {
       y: A.y + (C.y - A.y) * t,
     };
 
-    if (!crossOffsetOn) return base;
-
-    if (!yardsPerNormUnit) return base;
-    if (typeof crossTrackYardsSigned !== "number") return base;
-
     const dx = C.x - A.x;
     const dy = C.y - A.y;
     const len = Math.hypot(dx, dy);
-    if (!isFinite(len) || len < 0.0001) return base;
+    if (!isFinite(len) || len < 0.0001) return { base, perpRight: { x: 0, y: 0 } };
 
-    // Right-perp for screen coords (x right, y down)
+    // Perp RIGHT in screen coords (x right, y down)
     const perpRight = { x: -dy / len, y: dx / len };
 
-    const normUnitsPerYard = 1 / yardsPerNormUnit;
-    const offsetNorm = -crossTrackYardsSigned * normUnitsPerYard;
+    return { base, perpRight };
+  }, [hole, pos, A, C]);
 
-    const out = {
+  // YOU dot (centerline + optional offset)
+  const youNorm = useMemo(() => {
+    if (!hole || !pos || !A || !C) return null;
+
+    if (
+      typeof youToHoleYards === "number" &&
+      youToHoleYards > YOU_SHOW_WITHIN_YARDS
+    ) {
+      return null;
+    }
+
+    if (!basePointAndPerp) return null;
+
+    const { base, perpRight } = basePointAndPerp;
+
+    if (!crossOffsetOn) return base;
+    if (!yardsPerNormUnit) return base;
+    if (typeof crossScaledYardsSigned !== "number") return base;
+
+    const normUnitsPerYard = 1 / yardsPerNormUnit;
+    const offsetNorm = crossScaledYardsSigned * normUnitsPerYard;
+
+    return {
       x: clamp01(base.x + perpRight.x * offsetNorm),
       y: clamp01(base.y + perpRight.y * offsetNorm),
     };
-
-    return out;
   }, [
     hole,
     pos,
     A,
     C,
     youToHoleYards,
+    basePointAndPerp,
     crossOffsetOn,
-    crossTrackYardsSigned,
     yardsPerNormUnit,
+    crossScaledYardsSigned,
   ]);
 
-  // Layout constants
-  const FOOTER_H = 60;
+  // ✅ CALIBRATION ACTION:
+  // Put yourself at a known landmark (office), drag Target B to that landmark on the image,
+  // then press "Calibrate". We compute a per-hole scale so the dot matches the image.
+  function calibrateUsingTargetB() {
+    if (!basePointAndPerp) {
+      window.alert("Calibrate failed: no base point yet (need GPS + A/C).");
+      return;
+    }
+    if (!yardsPerNormUnit) {
+      window.alert("Calibrate failed: yards scale not ready yet.");
+      return;
+    }
+    if (!Bactive || !B) {
+      window.alert("Calibrate failed: you must set Target B and drag it to your landmark.");
+      return;
+    }
+    if (typeof crossRawYardsSigned !== "number" || crossRawYardsSigned === 0) {
+      window.alert("Calibrate failed: cross raw not available yet.");
+      return;
+    }
 
-  // Arrow boxes
+    const { base, perpRight } = basePointAndPerp;
+
+    // Signed normalized offset of B from base along perpRight
+    const vx = B.x - base.x;
+    const vy = B.y - base.y;
+    const offsetNormSigned = vx * perpRight.x + vy * perpRight.y;
+
+    // Convert that normalized offset into yards (using overlay yards scale)
+    const normUnitsPerYard = 1 / yardsPerNormUnit;
+    const offsetYardsSigned = offsetNormSigned / normUnitsPerYard;
+
+    // Scale to convert raw cross -> image cross
+    // scaled = raw * scale  =>  scale = image / raw
+    const scale = offsetYardsSigned / crossRawYardsSigned;
+
+    if (!isFinite(scale) || Math.abs(scale) < 0.01 || Math.abs(scale) > 10) {
+      window.alert(
+        `Calibrate failed: scale looks crazy (${scale}). Try again with B placed exactly on landmark.`
+      );
+      return;
+    }
+
+    // store positive/negative is OK — it captures direction too
+    saveCrossCalScale(scale);
+    window.alert(`Saved cross calibration for this hole.\nScale = ${scale.toFixed(3)}`);
+  }
+
+  const FOOTER_H = 60;
+  const TOP_BTN_TOP = 40;
+  const TOP_BTN_W = 92;
+  const TOP_BTN_H = 44;
+
   const ARROW_LEFT = 80;
   const ARROW_TOP_BC = 240;
   const ARROW_TOP_AB = 640;
@@ -814,7 +880,7 @@ export default function App() {
             }}
           >
             {/* Arrow boxes */}
-            {showGreenOnlyBox && (
+            {!Bactive && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AC}
@@ -825,14 +891,14 @@ export default function App() {
                 }
               />
             )}
-            {showTargetBoxes && (
+            {Bactive && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_BC}
                 yards={targetToGreenYards}
               />
             )}
-            {showTargetBoxes && (
+            {Bactive && (
               <ArrowYardBox
                 left={ARROW_LEFT}
                 top={ARROW_TOP_AB}
@@ -874,7 +940,7 @@ export default function App() {
                 zIndex: 10002,
                 pointerEvents: "auto",
                 userSelect: "none",
-                minWidth: 265,
+                minWidth: 280,
               }}
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
@@ -921,20 +987,16 @@ export default function App() {
               </div>
 
               <div>
-                Tee→Green: <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
+                Tee→Green:{" "}
+                <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
               </div>
 
               <div>
-                Cross: <b>{crossTrackText}</b>
+                Cross: <b>{crossText}</b>
               </div>
               <div style={{ opacity: 0.85 }}>
-                Cross raw: <b>{crossTrackRawText}</b> • scale{" "}
-                <b>{CROSS_YARDS_SCALE}</b>
-              </div>
-
-              <div>
-                Offset Used:{" "}
-                <b>{crossOffsetOn ? `${Math.abs(offsetUsedYards)} yd` : "OFF"}</b>
+                Raw: <b>{crossRawText}</b> • Cal scale:{" "}
+                <b>{crossCalScale.toFixed(3)}</b>
               </div>
 
               <div style={{ marginTop: 6 }}>
@@ -956,7 +1018,38 @@ export default function App() {
                 </label>
               </div>
 
-              <div style={{ marginTop: 4, opacity: 0.85 }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button
+                  onClick={calibrateUsingTargetB}
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                  title="Stand at landmark, drag Target B to the landmark on image, then press this"
+                >
+                  Calibrate (use Target B)
+                </button>
+
+                <button
+                  onClick={resetCrossCal}
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#f3f3f3",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                >
+                  Reset Cal
+                </button>
+              </div>
+
+              <div style={{ marginTop: 6, opacity: 0.85 }}>
                 Near hole:{" "}
                 <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
               </div>
@@ -968,9 +1061,9 @@ export default function App() {
               style={{
                 position: "fixed",
                 left: 10,
-                top: 40,
-                width: 92,
-                height: 44,
+                top: TOP_BTN_TOP,
+                width: TOP_BTN_W,
+                height: TOP_BTN_H,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -988,9 +1081,9 @@ export default function App() {
               style={{
                 position: "fixed",
                 right: 10,
-                top: 40,
-                width: 92,
-                height: 44,
+                top: TOP_BTN_TOP,
+                width: TOP_BTN_W,
+                height: TOP_BTN_H,
                 borderRadius: 12,
                 border: "1px solid #333",
                 background: "white",
@@ -1090,7 +1183,7 @@ export default function App() {
               left: 0,
               right: 0,
               bottom: 0,
-              height: 60,
+              height: FOOTER_H,
               background: "white",
               color: "black",
               borderTop: "1px solid #ddd",
@@ -1134,13 +1227,7 @@ export default function App() {
                 {holeNumberText}
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  lineHeight: 1.05,
-                }}
-              >
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   You→Green {youToGreenYards ?? "—"} yd
                 </div>
