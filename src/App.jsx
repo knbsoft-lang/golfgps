@@ -1017,8 +1017,7 @@ export default function App() {
   style={{
     position: "fixed",
     right: 10,
-    top: "50%",
-    transform: "translateY(-50%)",
+    bottom: FOOTER_H + 10,
     padding: "8px 10px",
     borderRadius: 12,
     border: "2px solid rgba(255,255,255,0.25)",
