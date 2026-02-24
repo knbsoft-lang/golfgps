@@ -206,6 +206,35 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
   );
 }
 
+// ===== Tee/Green Override storage (per hole + tee box) =====
+function tgOverrideKey(clubKey, nineName, holeNum, teeBox) {
+  const ck = (clubKey || "").replace(/\s+/g, "");
+  const nk = (nineName || "").replace(/\s+/g, "");
+  const hb = String(holeNum ?? "").padStart(2, "0");
+  const tb = (teeBox || "Unknown").replace(/\s+/g, "");
+  return `golfgps_tgOverride_${ck}-${nk}-${hb}-${tb}`;
+}
+
+function loadTGOverride(clubKey, nineName, holeNum, teeBox) {
+  try {
+    const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTGOverride(clubKey, nineName, holeNum, teeBox, patch) {
+  const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
+  const prev = loadTGOverride(clubKey, nineName, holeNum, teeBox) || {};
+  const next = { ...prev, ...patch };
+  try {
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch {}
+  return next;
+}
+
 export default function App() {
   const [page, setPage] = useState("home");
 
@@ -364,22 +393,83 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
+  // ===== Per-hole Tee/Green overrides (localStorage) =====
+  const [tgRev, setTgRev] = useState(0);
+
+  const holeNum = hole?.hole ?? null;
+  const holeNine = hole?.nine ?? null;
+
+  const tgOverride = useMemo(() => {
+    if (!clubKey || !holeNine || !holeNum || !teeBox) return null;
+    return loadTGOverride(clubKey, holeNine, holeNum, teeBox);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubKey, holeNine, holeNum, teeBox, tgRev]);
+
+  const teeLL = tgOverride?.tee ?? hole?.tee ?? null;
+  const greenLL = tgOverride?.green ?? hole?.green ?? null;
+
+  function handleUpdateTeeFromGPS() {
+    if (!hole || !clubKey || !teeBox) return;
+    if (!pos?.lat || !pos?.lon) return;
+
+    if (pos?.accuracyMeters != null && pos.accuracyMeters > 25) {
+      window.alert(
+        `GPS accuracy is LOW (${Math.round(
+          pos.accuracyMeters
+        )}m).\nWait for better accuracy, then try again.`
+      );
+      return;
+    }
+
+    saveTGOverride(clubKey, hole.nine, hole.hole, teeBox, {
+      tee: { lat: pos.lat, lon: pos.lon },
+    });
+    setTgRev((n) => n + 1);
+
+    window.alert(
+      `Saved TEE override\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\nLat ${pos.lat}\nLon ${pos.lon}`
+    );
+  }
+
+  function handleUpdateGreenFromGPS() {
+    if (!hole || !clubKey || !teeBox) return;
+    if (!pos?.lat || !pos?.lon) return;
+
+    if (pos?.accuracyMeters != null && pos.accuracyMeters > 25) {
+      window.alert(
+        `GPS accuracy is LOW (${Math.round(
+          pos.accuracyMeters
+        )}m).\nWait for better accuracy, then try again.`
+      );
+      return;
+    }
+
+    saveTGOverride(clubKey, hole.nine, hole.hole, teeBox, {
+      green: { lat: pos.lat, lon: pos.lon },
+    });
+    setTgRev((n) => n + 1);
+
+    window.alert(
+      `Saved GREEN override\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\nLat ${pos.lat}\nLon ${pos.lon}`
+    );
+  }
+
   const teeToGreenYards = useMemo(() => {
-    if (!hole) return null;
-    return roundYards(metersToYards(haversineMeters(hole.tee, hole.green)));
-  }, [hole]);
+    if (!teeLL || !greenLL) return null;
+    return roundYards(metersToYards(haversineMeters(teeLL, greenLL)));
+  }, [teeLL, greenLL]);
 
   const youToGreenYards = useMemo(() => {
-    if (!hole || !pos) return null;
-    return roundYards(metersToYards(haversineMeters(pos, hole.green)));
-  }, [hole, pos]);
+    if (!greenLL || !pos) return null;
+    return roundYards(metersToYards(haversineMeters(pos, greenLL)));
+  }, [pos, greenLL]);
 
   const youToHoleYards = useMemo(() => {
-    if (!hole || !pos) return null;
-    const ydT = roundYards(metersToYards(haversineMeters(pos, hole.tee)));
-    const ydG = roundYards(metersToYards(haversineMeters(pos, hole.green)));
+    if (!teeLL || !greenLL || !pos) return null;
+    const ydT = roundYards(metersToYards(haversineMeters(pos, teeLL)));
+    const ydG = roundYards(metersToYards(haversineMeters(pos, greenLL)));
     return Math.min(ydT, ydG);
-  }, [hole, pos]);
+  }, [pos, teeLL, greenLL]);
 
   // ========= Par + SI =========
   const parValue =
@@ -494,26 +584,18 @@ export default function App() {
     return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
-  const showTargetBoxes = useMemo(() => {
-    return Bactive && typeof teeToTargetYards === "number";
-  }, [Bactive, teeToTargetYards]);
-
-  const showGreenOnlyBox = useMemo(() => {
-    return !Bactive;
-  }, [Bactive]);
-
   const YOU_SHOW_WITHIN_YARDS = 1200;
   const [crossOffsetOn, setCrossOffsetOn] = useState(true);
 
   const crossRawYardsSigned = useMemo(() => {
-    if (!hole || !pos) return null;
-    const crossM = crossTrackMetersRightPositive(hole.tee, hole.green, pos);
+    if (!teeLL || !greenLL || !pos) return null;
+    const crossM = crossTrackMetersRightPositive(teeLL, greenLL, pos);
     if (typeof crossM !== "number" || !isFinite(crossM)) return null;
     const yd = metersToYards(crossM);
     const r = Math.round(yd);
     if (Math.abs(r) <= 1) return 0;
     return r;
-  }, [hole, pos]);
+  }, [teeLL, greenLL, pos]);
 
   const crossScaledYardsSigned = useMemo(() => {
     if (crossRawYardsSigned == null) return null;
@@ -541,9 +623,9 @@ export default function App() {
 
   // Base point on overlay centerline + perpendicular direction (RIGHT)
   const basePointAndPerp = useMemo(() => {
-    if (!hole || !pos || !A || !C) return null;
+    if (!teeLL || !greenLL || !pos || !A || !C) return null;
 
-    const t = projectAlongTeeGreen(hole.tee, hole.green, pos);
+    const t = projectAlongTeeGreen(teeLL, greenLL, pos);
     if (typeof t !== "number") return null;
 
     const base = {
@@ -560,11 +642,11 @@ export default function App() {
     const perpRight = { x: -dy / len, y: dx / len };
 
     return { base, perpRight };
-  }, [hole, pos, A, C]);
+  }, [teeLL, greenLL, pos, A, C]);
 
   // YOU dot (centerline + optional offset)
   const youNorm = useMemo(() => {
-    if (!hole || !pos || !A || !C) return null;
+    if (!teeLL || !greenLL || !pos || !A || !C) return null;
 
     if (
       typeof youToHoleYards === "number" &&
@@ -589,7 +671,8 @@ export default function App() {
       y: clamp01(base.y + perpRight.y * offsetNorm),
     };
   }, [
-    hole,
+    teeLL,
+    greenLL,
     pos,
     A,
     C,
@@ -613,7 +696,9 @@ export default function App() {
       return;
     }
     if (!Bactive || !B) {
-      window.alert("Calibrate failed: you must set Target B and drag it to your landmark.");
+      window.alert(
+        "Calibrate failed: you must set Target B and drag it to your landmark."
+      );
       return;
     }
     if (typeof crossRawYardsSigned !== "number" || crossRawYardsSigned === 0) {
@@ -645,7 +730,9 @@ export default function App() {
 
     // store positive/negative is OK — it captures direction too
     saveCrossCalScale(scale);
-    window.alert(`Saved cross calibration for this hole.\nScale = ${scale.toFixed(3)}`);
+    window.alert(
+      `Saved cross calibration for this hole.\nScale = ${scale.toFixed(3)}`
+    );
   }
 
   const FOOTER_H = 60;
@@ -940,7 +1027,7 @@ export default function App() {
                 zIndex: 10002,
                 pointerEvents: "auto",
                 userSelect: "none",
-                minWidth: 280,
+                minWidth: 190, // ✅ 90px smaller (was 280)
               }}
             >
               <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
@@ -1018,7 +1105,7 @@ export default function App() {
                 </label>
               </div>
 
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                 <button
                   onClick={calibrateUsingTargetB}
                   style={{
@@ -1046,6 +1133,36 @@ export default function App() {
                   }}
                 >
                   Reset Cal
+                </button>
+
+                <button
+                  onClick={handleUpdateTeeFromGPS}
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                  title="Stand on the tee box (good GPS accuracy), then press to save Tee coordinates for this hole + tee box"
+                >
+                  Update Tee
+                </button>
+
+                <button
+                  onClick={handleUpdateGreenFromGPS}
+                  style={{
+                    padding: "7px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                  title="Stand near green center (good GPS accuracy), then press to save Green coordinates for this hole + tee box"
+                >
+                  Update Green
                 </button>
               </div>
 
@@ -1227,7 +1344,13 @@ export default function App() {
                 {holeNumberText}
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  lineHeight: 1.05,
+                }}
+              >
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   You→Green {youToGreenYards ?? "—"} yd
                 </div>
