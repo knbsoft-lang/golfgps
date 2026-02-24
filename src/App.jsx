@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-11";
+const TEST_SYNC_ID = "TEST-12";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -1013,164 +1013,169 @@ export default function App() {
             )}
 
             {/* GPS DEBUG */}
-            <div
-              style={{
-                position: "fixed",
-                left: 10,
-                bottom: FOOTER_H + 10,
-                padding: "8px 10px",
-                borderRadius: 12,
-                border: "2px solid rgba(255,255,255,0.25)",
-                background: "rgba(0,0,0,0.55)",
-                fontSize: 12,
-                lineHeight: 1.25,
-                zIndex: 10002,
-                pointerEvents: "auto",
-                userSelect: "none",
-                minWidth: 190, // ✅ 90px smaller (was 280)
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
+<div
+  style={{
+    position: "fixed",
+    right: 10,
+    top: "50%",
+    transform: "translateY(-50%)",
+    padding: "8px 10px",
+    borderRadius: 12,
+    border: "2px solid rgba(255,255,255,0.25)",
+    background: "rgba(0,0,0,0.55)",
+    fontSize: 12,
+    lineHeight: 1.25,
+    zIndex: 10002,
+    pointerEvents: "auto",
+    userSelect: "none",
 
-              <div>
-                Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
-              </div>
-              <div>
-                Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
-              </div>
+    // ✅ shrink width (tweak if you want even smaller/larger)
+    width: 240,
+  }}
+>
+  <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
 
-              <div style={{ marginBottom: 4 }}>
-                Sync: <b>{TEST_SYNC_ID}</b>
-              </div>
-              <div style={{ marginBottom: 4 }}>
-                Build: <b>{BUILD_TEST_ID}</b>
-              </div>
+  <div>
+    Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
+  </div>
+  <div>
+    Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
+  </div>
 
-              <div>
-                Fixes: <b>{fixCount}</b>{" "}
-                {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
-              </div>
+  <div style={{ marginBottom: 6 }}>
+    Sync: <b>{TEST_SYNC_ID}</b>
+  </div>
 
-              <div>
-                Acc:{" "}
-                <b>
-                  {pos?.accuracyMeters != null
-                    ? `${Math.round(pos.accuracyMeters)}m`
-                    : "—"}
-                </b>
-              </div>
+  <div>
+    Fixes: <b>{fixCount}</b>{" "}
+    {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
+  </div>
 
-              <div>
-                Trust:{" "}
-                <b>
-                  {pos?.accuracyMeters != null
-                    ? pos.accuracyMeters <= 10
-                      ? "HIGH"
-                      : pos.accuracyMeters <= 25
-                      ? "OK"
-                      : "LOW"
-                    : "—"}
-                </b>
-              </div>
+  <div>
+    Acc:{" "}
+    <b>
+      {pos?.accuracyMeters != null ? `${Math.round(pos.accuracyMeters)}m` : "—"}
+    </b>
+  </div>
 
-              <div>
-                Tee→Green:{" "}
-                <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
-              </div>
+  <div style={{ marginBottom: 6 }}>
+    Trust:{" "}
+    <b>
+      {pos?.accuracyMeters != null
+        ? pos.accuracyMeters <= 10
+          ? "HIGH"
+          : pos.accuracyMeters <= 25
+            ? "OK"
+            : "LOW"
+        : "—"}
+    </b>
+  </div>
 
-              <div>
-                Cross: <b>{crossText}</b>
-              </div>
-              <div style={{ opacity: 0.85 }}>
-                Raw: <b>{crossRawText}</b> • Cal scale:{" "}
-                <b>{crossCalScale.toFixed(3)}</b>
-              </div>
+  <div>
+    Tee→Green: <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
+  </div>
 
-              <div style={{ marginTop: 6 }}>
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    cursor: "pointer",
-                    opacity: 0.95,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={crossOffsetOn}
-                    onChange={(e) => setCrossOffsetOn(e.target.checked)}
-                  />
-                  <span style={{ fontWeight: 800 }}>Offset dot</span>
-                </label>
-              </div>
+  <div>
+    Cross: <b>{crossText}</b>
+  </div>
 
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                <button
-                  onClick={calibrateUsingTargetB}
-                  style={{
-                    padding: "7px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 12,
-                  }}
-                  title="Stand at landmark, drag Target B to the landmark on image, then press this"
-                >
-                  Calibrate (use Target B)
-                </button>
+  {/* ✅ Raw line, with Cal scale underneath */}
+  <div style={{ opacity: 0.85, marginTop: 2 }}>
+    Raw: <b>{crossRawText}</b>
+    <div style={{ marginTop: 2 }}>
+      Cal scale: <b>{crossCalScale.toFixed(3)}</b>
+    </div>
+  </div>
 
-                <button
-                  onClick={resetCrossCal}
-                  style={{
-                    padding: "7px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#f3f3f3",
-                    fontWeight: 900,
-                    fontSize: 12,
-                  }}
-                >
-                  Reset Cal
-                </button>
+  <div style={{ marginTop: 8 }}>
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        cursor: "pointer",
+        opacity: 0.95,
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={crossOffsetOn}
+        onChange={(e) => setCrossOffsetOn(e.target.checked)}
+      />
+      <span style={{ fontWeight: 800 }}>Offset dot</span>
+    </label>
+  </div>
 
-                <button
-                  onClick={handleUpdateTeeFromGPS}
-                  style={{
-                    padding: "7px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 12,
-                  }}
-                  title="Stand on the tee box (good GPS accuracy), then press to save Tee coordinates for this hole + tee box"
-                >
-                  Update Tee
-                </button>
+  {/* ✅ Buttons stacked vertically */}
+  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+    <button
+      onClick={calibrateUsingTargetB}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: "1px solid #333",
+        background: "white",
+        fontWeight: 900,
+        fontSize: 12,
+        width: "100%",
+      }}
+      title="Stand at landmark, drag Target B to the landmark on image, then press this"
+    >
+      Calibrate (use Target B)
+    </button>
 
-                <button
-                  onClick={handleUpdateGreenFromGPS}
-                  style={{
-                    padding: "7px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 12,
-                  }}
-                  title="Stand near green center (good GPS accuracy), then press to save Green coordinates for this hole + tee box"
-                >
-                  Update Green
-                </button>
-              </div>
+    <button
+      onClick={resetCrossCal}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: "1px solid #333",
+        background: "#f3f3f3",
+        fontWeight: 900,
+        fontSize: 12,
+        width: "100%",
+      }}
+    >
+      Reset Cal
+    </button>
 
-              <div style={{ marginTop: 6, opacity: 0.85 }}>
-                Near hole:{" "}
-                <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
-              </div>
-            </div>
+    <button
+      onClick={handleUpdateTeeFromGPS}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: "1px solid #333",
+        background: "white",
+        fontWeight: 900,
+        fontSize: 12,
+        width: "100%",
+      }}
+      title="Stand on tee (good accuracy), then save tee coordinates"
+    >
+      Update Tee
+    </button>
+
+    <button
+      onClick={handleUpdateGreenFromGPS}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 10,
+        border: "1px solid #333",
+        background: "white",
+        fontWeight: 900,
+        fontSize: 12,
+        width: "100%",
+      }}
+      title="Stand near green center (good accuracy), then save green coordinates"
+    >
+      Update Green
+    </button>
+  </div>
+
+  <div style={{ marginTop: 10, opacity: 0.85 }}>
+    Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
+  </div>
+</div>
 
             {/* HOME + SETUP */}
             <button
