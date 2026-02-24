@@ -75,14 +75,14 @@ export const BROAD_STRIPES = {
 
     // Back nine stored as holes 1..9 so it matches /Back/hole01.png..hole09.png
     Back: [
-      { hole: 1, par: 5, hcp: 2, tee: { lat: 28.966961, lon: -81.959175 }, green: { lat: 28.967911, lon: -81.955067 } },
-      { hole: 2, par: 3, hcp: 14, tee: { lat: 28.968336, lon: -81.954383 }, green: { lat: 28.969061, lon: -81.955081 } },
+      { hole: 1, par: 5, hcp: 2, tee: { lat: 28.967123, lon: -81.958785 }, green: { lat: 28.967911, lon: -81.955067 } },
+      { hole: 2, par: 3, hcp: 14, tee: { lat: 28.968423, lon: -81.954368 }, green: { lat: 28.969061, lon: -81.955081 } },
       { hole: 3, par: 4, hcp: 16, tee: { lat: 28.969883, lon: -81.955847 }, green: { lat: 28.971453, lon: -81.957758 } },
-      { hole: 4, par: 4, hcp: 10, tee: { lat: 28.97185, lon: -81.958447 }, green: { lat: 28.971903, lon: -81.955461 } },
-      { hole: 5, par: 3, hcp: 18, tee: { lat: 28.972314, lon: -81.955292 }, green: { lat: 28.972717, lon: -81.956197 } },
-      { hole: 6, par: 4, hcp: 4, tee: { lat: 28.973219, lon: -81.956367 }, green: { lat: 28.973561, lon: -81.959553 } },
-      { hole: 7, par: 5, hcp: 12, tee: { lat: 28.973464, lon: -81.960228 }, green: { lat: 28.97, lon: -81.958731 } },
-      { hole: 8, par: 4, hcp: 8, tee: { lat: 28.969367, lon: -81.958408 }, green: { lat: 28.970217, lon: -81.960922 } },
+      { hole: 4, par: 4, hcp: 10, tee: { lat: 28.971886, lon: -81.958384 }, green: { lat: 28.971903, lon: -81.955461 } },
+      { hole: 5, par: 3, hcp: 18, tee: { lat: 28.972325, lon: -81.955277 }, green: { lat: 28.972717, lon: -81.956197 } },
+      { hole: 6, par: 4, hcp: 4, tee: { lat: 28.973274, lon: -81.956430 }, green: { lat: 28.973561, lon: -81.959553 } },
+      { hole: 7, par: 5, hcp: 12, tee: { lat: 28.973500, lon: -81.960244 }, green: { lat: 28.97, lon: -81.958731 } },
+      { hole: 8, par: 4, hcp: 8, tee: { lat: 28.969403, lon: -81.958446 }, green: { lat: 28.970217, lon: -81.960922 } },
       { hole: 9, par: 4, hcp: 6, tee: { lat: 28.969769, lon: -81.961586 }, green: { lat: 28.967358, lon: -81.960144 } },
     ],
   },
