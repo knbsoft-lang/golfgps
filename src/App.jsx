@@ -1030,7 +1030,7 @@ export default function App() {
     userSelect: "none",
 
     // ✅ shrink width (tweak if you want even smaller/larger)
-    width: 240,
+    width: 200,
   }}
 >
   <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
