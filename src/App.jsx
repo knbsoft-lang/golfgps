@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-13";
+const TEST_SYNC_ID = "TEST-14";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -235,6 +235,59 @@ function saveTGOverride(clubKey, nineName, holeNum, teeBox, patch) {
   return next;
 }
 
+function resetTGOverrideField(clubKey, nineName, holeNum, teeBox, field /* 'tee' | 'green' */) {
+  const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
+  const prev = loadTGOverride(clubKey, nineName, holeNum, teeBox) || {};
+  if (!prev || typeof prev !== "object") return null;
+
+  const next = { ...prev };
+  delete next[field];
+
+  // if nothing left, remove key entirely
+  const hasAny =
+    (next.tee && typeof next.tee === "object") ||
+    (next.green && typeof next.green === "object");
+
+  try {
+    if (hasAny) localStorage.setItem(key, JSON.stringify(next));
+    else localStorage.removeItem(key);
+  } catch {}
+
+  return hasAny ? next : null;
+}
+
+// ===== Backup Export/Import (ALL golfgps_* keys) =====
+function collectGolfGpsStorage() {
+  const out = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("golfgps_")) out[k] = localStorage.getItem(k);
+    }
+  } catch {}
+  return out;
+}
+
+function downloadTextFile(filename, text, mime = "application/json") {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function todayYMD() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function App() {
   const [page, setPage] = useState("home");
 
@@ -452,6 +505,100 @@ export default function App() {
     window.alert(
       `Saved GREEN override\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\nLat ${pos.lat}\nLon ${pos.lon}`
     );
+  }
+
+  function handleResetTeeOverride() {
+    if (!hole || !clubKey || !teeBox) return;
+    const ok = window.confirm(
+      `Reset TEE override for:\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\n\nThis only affects THIS hole+tee box.`
+    );
+    if (!ok) return;
+    resetTGOverrideField(clubKey, hole.nine, hole.hole, teeBox, "tee");
+    setTgRev((n) => n + 1);
+    window.alert("TEE override reset for this hole.");
+  }
+
+  function handleResetGreenOverride() {
+    if (!hole || !clubKey || !teeBox) return;
+    const ok = window.confirm(
+      `Reset GREEN override for:\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\n\nThis only affects THIS hole+tee box.`
+    );
+    if (!ok) return;
+    resetTGOverrideField(clubKey, hole.nine, hole.hole, teeBox, "green");
+    setTgRev((n) => n + 1);
+    window.alert("GREEN override reset for this hole.");
+  }
+
+  // ===== Export / Import =====
+  const importFileInputRef = useRef(null);
+
+  function handleExportBackup() {
+    const data = {
+      meta: {
+        app: "GolfGPS",
+        version: "backup-v1",
+        date: new Date().toISOString(),
+        testSyncId: TEST_SYNC_ID,
+        buildId: BUILD_TEST_ID,
+      },
+      localStorage: collectGolfGpsStorage(),
+    };
+
+    const json = JSON.stringify(data, null, 2);
+    const fname = `GolfGPS_Backup_${todayYMD()}.json`;
+    downloadTextFile(fname, json);
+    window.alert(
+      `Backup exported:\n${fname}\n\nIt is saved in Downloads.\nCopy it to your PC for safekeeping.`
+    );
+  }
+
+  function handleClickImport() {
+    importFileInputRef.current?.click?.();
+  }
+
+  async function handleImportSelectedFile(e) {
+    const f = e.target.files?.[0] || null;
+    e.target.value = ""; // allow selecting same file again later
+    if (!f) return;
+
+    try {
+      const text = await f.text();
+      const parsed = JSON.parse(text);
+
+      const bag = parsed?.localStorage;
+      if (!bag || typeof bag !== "object") {
+        window.alert("Import failed: file does not contain localStorage data.");
+        return;
+      }
+
+      const keys = Object.keys(bag).filter((k) => k.startsWith("golfgps_"));
+      if (!keys.length) {
+        window.alert("Import failed: no golfgps_* keys found in this file.");
+        return;
+      }
+
+      const ok = window.confirm(
+        `Import ${keys.length} items into tablet storage?\n\nThis will OVERWRITE any matching golfgps_* keys on this tablet.\n\nPress OK to import.`
+      );
+      if (!ok) return;
+
+      let written = 0;
+      for (const k of keys) {
+        try {
+          localStorage.setItem(k, String(bag[k]));
+          written++;
+        } catch {}
+      }
+
+      // refresh dependent memoized reads
+      setTgRev((n) => n + 1);
+
+      window.alert(
+        `Import complete.\nWrote ${written} keys.\n\nTip: If you are currently on PLAY, go HOME then PLAY again to refresh any visuals.`
+      );
+    } catch (err) {
+      window.alert(`Import failed: ${err?.message || String(err)}`);
+    }
   }
 
   const teeToGreenYards = useMemo(() => {
@@ -683,9 +830,7 @@ export default function App() {
     crossScaledYardsSigned,
   ]);
 
-  // ✅ CALIBRATION ACTION:
-  // Put yourself at a known landmark (office), drag Target B to that landmark on the image,
-  // then press "Calibrate". We compute a per-hole scale so the dot matches the image.
+  // ✅ CALIBRATION ACTION
   function calibrateUsingTargetB() {
     if (!basePointAndPerp) {
       window.alert("Calibrate failed: no base point yet (need GPS + A/C).");
@@ -708,17 +853,13 @@ export default function App() {
 
     const { base, perpRight } = basePointAndPerp;
 
-    // Signed normalized offset of B from base along perpRight
     const vx = B.x - base.x;
     const vy = B.y - base.y;
     const offsetNormSigned = vx * perpRight.x + vy * perpRight.y;
 
-    // Convert that normalized offset into yards (using overlay yards scale)
     const normUnitsPerYard = 1 / yardsPerNormUnit;
     const offsetYardsSigned = offsetNormSigned / normUnitsPerYard;
 
-    // Scale to convert raw cross -> image cross
-    // scaled = raw * scale  =>  scale = image / raw
     const scale = offsetYardsSigned / crossRawYardsSigned;
 
     if (!isFinite(scale) || Math.abs(scale) < 0.01 || Math.abs(scale) > 10) {
@@ -728,7 +869,6 @@ export default function App() {
       return;
     }
 
-    // store positive/negative is OK — it captures direction too
     saveCrossCalScale(scale);
     window.alert(
       `Saved cross calibration for this hole.\nScale = ${scale.toFixed(3)}`
@@ -808,6 +948,15 @@ export default function App() {
         minHeight: "100vh",
       }}
     >
+      {/* Hidden file input for Import */}
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept="application/json,.json"
+        onChange={handleImportSelectedFile}
+        style={{ display: "none" }}
+      />
+
       {/* HOME PAGE */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
@@ -1013,168 +1162,241 @@ export default function App() {
             )}
 
             {/* GPS DEBUG */}
-<div
-  style={{
-    position: "fixed",
-    right: 10,
-    bottom: FOOTER_H + 10,
-    padding: "8px 10px",
-    borderRadius: 12,
-    border: "2px solid rgba(255,255,255,0.25)",
-    background: "rgba(0,0,0,0.55)",
-    fontSize: 12,
-    lineHeight: 1.25,
-    zIndex: 10002,
-    pointerEvents: "auto",
-    userSelect: "none",
+            <div
+              style={{
+                position: "fixed",
+                right: 10,
+                bottom: FOOTER_H + 10,
+                padding: "8px 10px",
+                borderRadius: 12,
+                border: "2px solid rgba(255,255,255,0.25)",
+                background: "rgba(0,0,0,0.55)",
+                fontSize: 12,
+                lineHeight: 1.25,
+                zIndex: 10002,
+                pointerEvents: "auto",
+                userSelect: "none",
+                width: 200,
+              }}
+            >
+              <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
 
-    // ✅ shrink width (tweak if you want even smaller/larger)
-    width: 200,
-  }}
->
-  <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
+              <div>
+                Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
+              </div>
+              <div>
+                Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
+              </div>
 
-  <div>
-    Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
-  </div>
-  <div>
-    Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
-  </div>
+              <div style={{ marginBottom: 6 }}>
+                Sync: <b>{TEST_SYNC_ID}</b>
+              </div>
 
-  <div style={{ marginBottom: 6 }}>
-    Sync: <b>{TEST_SYNC_ID}</b>
-  </div>
+              <div>
+                Fixes: <b>{fixCount}</b>{" "}
+                {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
+              </div>
 
-  <div>
-    Fixes: <b>{fixCount}</b>{" "}
-    {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
-  </div>
+              <div>
+                Acc:{" "}
+                <b>
+                  {pos?.accuracyMeters != null
+                    ? `${Math.round(pos.accuracyMeters)}m`
+                    : "—"}
+                </b>
+              </div>
 
-  <div>
-    Acc:{" "}
-    <b>
-      {pos?.accuracyMeters != null ? `${Math.round(pos.accuracyMeters)}m` : "—"}
-    </b>
-  </div>
+              <div style={{ marginBottom: 6 }}>
+                Trust:{" "}
+                <b>
+                  {pos?.accuracyMeters != null
+                    ? pos.accuracyMeters <= 10
+                      ? "HIGH"
+                      : pos.accuracyMeters <= 25
+                      ? "OK"
+                      : "LOW"
+                    : "—"}
+                </b>
+              </div>
 
-  <div style={{ marginBottom: 6 }}>
-    Trust:{" "}
-    <b>
-      {pos?.accuracyMeters != null
-        ? pos.accuracyMeters <= 10
-          ? "HIGH"
-          : pos.accuracyMeters <= 25
-            ? "OK"
-            : "LOW"
-        : "—"}
-    </b>
-  </div>
+              <div>
+                Tee→Green:{" "}
+                <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
+              </div>
 
-  <div>
-    Tee→Green: <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
-  </div>
+              <div>
+                Cross: <b>{crossText}</b>
+              </div>
 
-  <div>
-    Cross: <b>{crossText}</b>
-  </div>
+              <div style={{ opacity: 0.85, marginTop: 2 }}>
+                Raw: <b>{crossRawText}</b>
+                <div style={{ marginTop: 2 }}>
+                  Cal scale: <b>{crossCalScale.toFixed(3)}</b>
+                </div>
+              </div>
 
-  {/* ✅ Raw line, with Cal scale underneath */}
-  <div style={{ opacity: 0.85, marginTop: 2 }}>
-    Raw: <b>{crossRawText}</b>
-    <div style={{ marginTop: 2 }}>
-      Cal scale: <b>{crossCalScale.toFixed(3)}</b>
-    </div>
-  </div>
+              <div style={{ marginTop: 8 }}>
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: "pointer",
+                    opacity: 0.95,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={crossOffsetOn}
+                    onChange={(e) => setCrossOffsetOn(e.target.checked)}
+                  />
+                  <span style={{ fontWeight: 800 }}>Offset dot</span>
+                </label>
+              </div>
 
-  <div style={{ marginTop: 8 }}>
-    <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        cursor: "pointer",
-        opacity: 0.95,
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={crossOffsetOn}
-        onChange={(e) => setCrossOffsetOn(e.target.checked)}
-      />
-      <span style={{ fontWeight: 800 }}>Offset dot</span>
-    </label>
-  </div>
+              {/* ✅ Buttons stacked vertically */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  marginTop: 10,
+                }}
+              >
+                <button
+                  onClick={calibrateUsingTargetB}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                  title="Stand at landmark, drag Target B to the landmark on image, then press this"
+                >
+                  Calibrate (use Target B)
+                </button>
 
-  {/* ✅ Buttons stacked vertically */}
-  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-    <button
-      onClick={calibrateUsingTargetB}
-      style={{
-        padding: "8px 10px",
-        borderRadius: 10,
-        border: "1px solid #333",
-        background: "white",
-        fontWeight: 900,
-        fontSize: 12,
-        width: "100%",
-      }}
-      title="Stand at landmark, drag Target B to the landmark on image, then press this"
-    >
-      Calibrate (use Target B)
-    </button>
+                <button
+                  onClick={resetCrossCal}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#f3f3f3",
+                    fontWeight: 900,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                >
+                  Reset Cal
+                </button>
 
-    <button
-      onClick={resetCrossCal}
-      style={{
-        padding: "8px 10px",
-        borderRadius: 10,
-        border: "1px solid #333",
-        background: "#f3f3f3",
-        fontWeight: 900,
-        fontSize: 12,
-        width: "100%",
-      }}
-    >
-      Reset Cal
-    </button>
+                <button
+                  onClick={handleUpdateTeeFromGPS}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                  title="Stand on tee (good accuracy), then save tee coordinates"
+                >
+                  Update Tee
+                </button>
 
-    <button
-      onClick={handleUpdateTeeFromGPS}
-      style={{
-        padding: "8px 10px",
-        borderRadius: 10,
-        border: "1px solid #333",
-        background: "white",
-        fontWeight: 900,
-        fontSize: 12,
-        width: "100%",
-      }}
-      title="Stand on tee (good accuracy), then save tee coordinates"
-    >
-      Update Tee
-    </button>
+                <button
+                  onClick={handleUpdateGreenFromGPS}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                  title="Stand near green center (good accuracy), then save green coordinates"
+                >
+                  Update Green
+                </button>
 
-    <button
-      onClick={handleUpdateGreenFromGPS}
-      style={{
-        padding: "8px 10px",
-        borderRadius: 10,
-        border: "1px solid #333",
-        background: "white",
-        fontWeight: 900,
-        fontSize: 12,
-        width: "100%",
-      }}
-      title="Stand near green center (good accuracy), then save green coordinates"
-    >
-      Update Green
-    </button>
-  </div>
+                {/* NEW: Reset tee/green override (this hole only) */}
+                <button
+                  onClick={handleResetTeeOverride}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#f3f3f3",
+                    fontWeight: 900,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                  title="Undo a bad tee save (this hole only)"
+                >
+                  Reset Tee Override
+                </button>
 
-  <div style={{ marginTop: 10, opacity: 0.85 }}>
-    Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
-  </div>
-</div>
+                <button
+                  onClick={handleResetGreenOverride}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#f3f3f3",
+                    fontWeight: 900,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                  title="Undo a bad green save (this hole only)"
+                >
+                  Reset Green Override
+                </button>
+
+                {/* NEW: Export / Import */}
+                <button
+                  onClick={handleExportBackup}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 950,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                  title="Download a JSON backup of all saved golfgps_* data"
+                >
+                  Export Backup
+                </button>
+
+                <button
+                  onClick={handleClickImport}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#f3f3f3",
+                    fontWeight: 950,
+                    fontSize: 12,
+                    width: "100%",
+                  }}
+                  title="Import a previously exported JSON backup"
+                >
+                  Import Backup
+                </button>
+              </div>
+
+              <div style={{ marginTop: 10, opacity: 0.85 }}>
+                Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
+              </div>
+            </div>
 
             {/* HOME + SETUP */}
             <button
