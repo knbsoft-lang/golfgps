@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-18";
+const TEST_SYNC_ID = "TEST-20";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -235,7 +235,13 @@ function saveTGOverride(clubKey, nineName, holeNum, teeBox, patch) {
   return next;
 }
 
-function resetTGOverrideField(clubKey, nineName, holeNum, teeBox, field /* 'tee' | 'green' */) {
+function resetTGOverrideField(
+  clubKey,
+  nineName,
+  holeNum,
+  teeBox,
+  field /* 'tee' | 'green' */
+) {
   const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
   const prev = loadTGOverride(clubKey, nineName, holeNum, teeBox) || {};
   if (!prev || typeof prev !== "object") return null;
@@ -243,7 +249,6 @@ function resetTGOverrideField(clubKey, nineName, holeNum, teeBox, field /* 'tee'
   const next = { ...prev };
   delete next[field];
 
-  // if nothing left, remove key entirely
   const hasAny =
     (next.tee && typeof next.tee === "object") ||
     (next.green && typeof next.green === "object");
@@ -558,7 +563,7 @@ export default function App() {
 
   async function handleImportSelectedFile(e) {
     const f = e.target.files?.[0] || null;
-    e.target.value = ""; // allow selecting same file again later
+    e.target.value = "";
     if (!f) return;
 
     try {
@@ -590,7 +595,6 @@ export default function App() {
         } catch {}
       }
 
-      // refresh dependent memoized reads
       setTgRev((n) => n + 1);
 
       window.alert(
@@ -783,7 +787,8 @@ export default function App() {
     const dx = C.x - A.x;
     const dy = C.y - A.y;
     const len = Math.hypot(dx, dy);
-    if (!isFinite(len) || len < 0.0001) return { base, perpRight: { x: 0, y: 0 } };
+    if (!isFinite(len) || len < 0.0001)
+      return { base, perpRight: { x: 0, y: 0 } };
 
     // Perp RIGHT in screen coords (x right, y down)
     const perpRight = { x: -dy / len, y: dx / len };
@@ -830,7 +835,6 @@ export default function App() {
     crossScaledYardsSigned,
   ]);
 
-  // ✅ CALIBRATION ACTION
   function calibrateUsingTargetB() {
     if (!basePointAndPerp) {
       window.alert("Calibrate failed: no base point yet (need GPS + A/C).");
@@ -1161,242 +1165,244 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG */}
-            <div
-              style={{
-                position: "fixed",
-                right: 10,
-                bottom: FOOTER_H + 10,
-                padding: "8px 10px",
-                borderRadius: 12,
-                border: "2px solid rgba(255,255,255,0.25)",
-                background: "rgba(0,0,0,0.55)",
-                fontSize: 12,
-                lineHeight: 1.25,
-                zIndex: 10002,
-                pointerEvents: "auto",
-                userSelect: "none",
-                width: 200,
-              }}
-            >
-              <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
-
-              <div>
-                Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
-              </div>
-              <div>
-                Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
-              </div>
-
-              <div style={{ marginBottom: 6 }}>
-                Sync: <b>{TEST_SYNC_ID}</b>
-              </div>
-
-              <div>
-                Fixes: <b>{fixCount}</b>{" "}
-                {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
-              </div>
-
-              <div>
-                Acc:{" "}
-                <b>
-                  {pos?.accuracyMeters != null
-                    ? `${Math.round(pos.accuracyMeters)}m`
-                    : "—"}
-                </b>
-              </div>
-
-              <div style={{ marginBottom: 6 }}>
-                Trust:{" "}
-                <b>
-                  {pos?.accuracyMeters != null
-                    ? pos.accuracyMeters <= 10
-                      ? "HIGH"
-                      : pos.accuracyMeters <= 25
-                      ? "OK"
-                      : "LOW"
-                    : "—"}
-                </b>
-              </div>
-
-              <div>
-                Tee→Green:{" "}
-                <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
-              </div>
-
-              <div>
-                Cross: <b>{crossText}</b>
-              </div>
-
-              <div style={{ opacity: 0.85, marginTop: 2 }}>
-                Raw: <b>{crossRawText}</b>
-                <div style={{ marginTop: 2 }}>
-                  Cal scale: <b>{crossCalScale.toFixed(3)}</b>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 8 }}>
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    cursor: "pointer",
-                    opacity: 0.95,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={crossOffsetOn}
-                    onChange={(e) => setCrossOffsetOn(e.target.checked)}
-                  />
-                  <span style={{ fontWeight: 800 }}>Offset dot</span>
-                </label>
-              </div>
-
-              {/* ✅ Buttons stacked vertically */}
+            {/* ✅ GPS DEBUG / TOOLS BOX — ONLY IN SETUP MODE */}
+            {setupEnabled && (
               <div
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                  marginTop: 10,
+                  position: "fixed",
+                  right: 10,
+                  bottom: FOOTER_H + 10,
+                  padding: "8px 10px",
+                  borderRadius: 12,
+                  border: "2px solid rgba(255,255,255,0.25)",
+                  background: "rgba(0,0,0,0.55)",
+                  fontSize: 12,
+                  lineHeight: 1.25,
+                  zIndex: 10002,
+                  pointerEvents: "auto",
+                  userSelect: "none",
+                  width: 200,
                 }}
               >
-                <button
-                  onClick={calibrateUsingTargetB}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 12,
-                    width: "100%",
-                  }}
-                  title="Stand at landmark, drag Target B to the landmark on image, then press this"
-                >
-                  Calibrate (use Target B)
-                </button>
+                <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
 
-                <button
-                  onClick={resetCrossCal}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#f3f3f3",
-                    fontWeight: 900,
-                    fontSize: 12,
-                    width: "100%",
-                  }}
-                >
-                  Reset Cal
-                </button>
+                <div>
+                  Lat: <b>{pos?.lat != null ? pos.lat.toFixed(6) : "—"}</b>
+                </div>
+                <div>
+                  Lon: <b>{pos?.lon != null ? pos.lon.toFixed(6) : "—"}</b>
+                </div>
 
-                <button
-                  onClick={handleUpdateTeeFromGPS}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 12,
-                    width: "100%",
-                  }}
-                  title="Stand on tee (good accuracy), then save tee coordinates"
-                >
-                  Update Tee
-                </button>
+                <div style={{ marginBottom: 6 }}>
+                  Sync: <b>{TEST_SYNC_ID}</b>
+                </div>
 
-                <button
-                  onClick={handleUpdateGreenFromGPS}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 12,
-                    width: "100%",
-                  }}
-                  title="Stand near green center (good accuracy), then save green coordinates"
-                >
-                  Update Green
-                </button>
+                <div>
+                  Fixes: <b>{fixCount}</b>{" "}
+                  {fixAgeSec != null ? `(age ${fixAgeSec}s)` : ""}
+                </div>
 
-                {/* NEW: Reset tee/green override (this hole only) */}
-                <button
-                  onClick={handleResetTeeOverride}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#f3f3f3",
-                    fontWeight: 900,
-                    fontSize: 12,
-                    width: "100%",
-                  }}
-                  title="Undo a bad tee save (this hole only)"
-                >
-                  Reset Tee Override
-                </button>
+                <div>
+                  Acc:{" "}
+                  <b>
+                    {pos?.accuracyMeters != null
+                      ? `${Math.round(pos.accuracyMeters)}m`
+                      : "—"}
+                  </b>
+                </div>
 
-                <button
-                  onClick={handleResetGreenOverride}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#f3f3f3",
-                    fontWeight: 900,
-                    fontSize: 12,
-                    width: "100%",
-                  }}
-                  title="Undo a bad green save (this hole only)"
-                >
-                  Reset Green Override
-                </button>
+                <div style={{ marginBottom: 6 }}>
+                  Trust:{" "}
+                  <b>
+                    {pos?.accuracyMeters != null
+                      ? pos.accuracyMeters <= 10
+                        ? "HIGH"
+                        : pos.accuracyMeters <= 25
+                        ? "OK"
+                        : "LOW"
+                      : "—"}
+                  </b>
+                </div>
 
-                {/* NEW: Export / Import */}
-                <button
-                  onClick={handleExportBackup}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 950,
-                    fontSize: 12,
-                    width: "100%",
-                  }}
-                  title="Download a JSON backup of all saved golfgps_* data"
-                >
-                  Export Backup
-                </button>
+                <div>
+                  Tee→Green:{" "}
+                  <b>
+                    {teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}
+                  </b>
+                </div>
 
-                <button
-                  onClick={handleClickImport}
+                <div>
+                  Cross: <b>{crossText}</b>
+                </div>
+
+                <div style={{ opacity: 0.85, marginTop: 2 }}>
+                  Raw: <b>{crossRawText}</b>
+                  <div style={{ marginTop: 2 }}>
+                    Cal scale: <b>{crossCalScale.toFixed(3)}</b>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 8 }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      cursor: "pointer",
+                      opacity: 0.95,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={crossOffsetOn}
+                      onChange={(e) => setCrossOffsetOn(e.target.checked)}
+                    />
+                    <span style={{ fontWeight: 800 }}>Offset dot</span>
+                  </label>
+                </div>
+
+                <div
                   style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#f3f3f3",
-                    fontWeight: 950,
-                    fontSize: 12,
-                    width: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    marginTop: 10,
                   }}
-                  title="Import a previously exported JSON backup"
                 >
-                  Import Backup
-                </button>
+                  <button
+                    onClick={calibrateUsingTargetB}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "white",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                    title="Stand at landmark, drag Target B to the landmark on image, then press this"
+                  >
+                    Calibrate (use Target B)
+                  </button>
+
+                  <button
+                    onClick={resetCrossCal}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#f3f3f3",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                  >
+                    Reset Cal
+                  </button>
+
+                  <button
+                    onClick={handleUpdateTeeFromGPS}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "white",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                    title="Stand on tee (good accuracy), then save tee coordinates"
+                  >
+                    Update Tee
+                  </button>
+
+                  <button
+                    onClick={handleUpdateGreenFromGPS}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "white",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                    title="Stand near green center (good accuracy), then save green coordinates"
+                  >
+                    Update Green
+                  </button>
+
+                  <button
+                    onClick={handleResetTeeOverride}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#f3f3f3",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                    title="Undo a bad tee save (this hole only)"
+                  >
+                    Reset Tee Override
+                  </button>
+
+                  <button
+                    onClick={handleResetGreenOverride}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#f3f3f3",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                    title="Undo a bad green save (this hole only)"
+                  >
+                    Reset Green Override
+                  </button>
+
+                  <button
+                    onClick={handleExportBackup}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "white",
+                      fontWeight: 950,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                    title="Download a JSON backup of all saved golfgps_* data"
+                  >
+                    Export Backup
+                  </button>
+
+                  <button
+                    onClick={handleClickImport}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "#f3f3f3",
+                      fontWeight: 950,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                    title="Import a previously exported JSON backup"
+                  >
+                    Import Backup
+                  </button>
+                </div>
+
+                <div style={{ marginTop: 10, opacity: 0.85 }}>
+                  Near hole:{" "}
+                  <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
+                </div>
               </div>
-
-              <div style={{ marginTop: 10, opacity: 0.85 }}>
-                Near hole: <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
-              </div>
-            </div>
+            )}
 
             {/* HOME + SETUP */}
             <button
