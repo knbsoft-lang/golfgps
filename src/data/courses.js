@@ -119,8 +119,51 @@ export const ORANGE_BLOSSOM = {
   },
 };
 
+export const HACIENDA_HILLS = {
+  clubName: "Hacienda Hills",
+  courseType: "Championship",
+  nines: {
+    Lakes: [
+      { hole: 1, par: 5, hcp: 9, tee: { lat: 28.942964, lon: -81.962720 }, green: { lat: 28.941171, lon: -81.959545 } },
+      { hole: 2, par: 4, hcp: 2, tee: { lat: 28.939993, lon: -81.959098 }, green: { lat: 28.937895, lon: -81.957960 } },
+      { hole: 3, par: 3, hcp: 7, tee: { lat: 28.938128, lon: -81.957222 }, green: { lat: 28.938389, lon: -81.956284 } },
+      { hole: 4, par: 4, hcp: 5, tee: { lat: 28.938625, lon: -81.955535 }, green: { lat: 28.940722, lon: -81.954504 } },
+      { hole: 5, par: 4, hcp: 1, tee: { lat: 28.939578, lon: -81.954312 }, green: { lat: 28.936937, lon: -81.954261 } },
+      { hole: 6, par: 4, hcp: 3, tee: { lat: 28.936426, lon: -81.954667 }, green: { lat: 28.936596, lon: -81.957717 } },
+      { hole: 7, par: 4, hcp: 4, tee: { lat: 28.936828, lon: -81.959121 }, green: { lat: 28.936549, lon: -81.961768 } },
+      { hole: 8, par: 3, hcp: 6, tee: { lat: 28.936860, lon: -81.959068 }, green: { lat: 28.937393, lon: -81.962768 } },
+      { hole: 9, par: 5, hcp: 8, tee: { lat: 28.939483, lon: -81.963088 }, green: { lat: 28.942708, lon: -81.963187 } },
+    ],
+
+    Oaks: [
+      { hole: 1, par: 5, hcp: 4, tee: { lat: 28.943162, lon: -81.962565 }, green: { lat: 28.941484, lon: -81.959265 } },
+      { hole: 2, par: 3, hcp: 6, tee: { lat: 28.941031, lon: -81.958962 }, green: { lat: 28.941998, lon: -81.958521 } },
+      { hole: 3, par: 4, hcp: 5, tee: { lat: 28.942147, lon: -81.957587 }, green: { lat: 28.941199, lon: -81.955111 } },
+      { hole: 4, par: 5, hcp: 8, tee: { lat: 28.941860, lon: -81.954275 }, green: { lat: 28.945586, lon: -81.954306 } },
+      { hole: 5, par: 4, hcp: 9, tee: { lat: 28.945847, lon: -81.955060 }, green: { lat: 28.946257, lon: -81.957486 } },
+      { hole: 6, par: 4, hcp: 1, tee: { lat: 28.945990, lon: -81.958532 }, green: { lat: 28.942717, lon: -81.957818 } },
+      { hole: 7, par: 3, hcp: 7, tee: { lat: 28.943330, lon: -81.958453 }, green: { lat: 28.942250, lon: -81.958862 } },
+      { hole: 8, par: 4, hcp: 3, tee: { lat: 28.942880, lon: -81.959300 }, green: { lat: 28.945532, lon: -81.959212 } },
+      { hole: 9, par: 4, hcp: 2, tee: { lat: 28.945471, lon: -81.961032 }, green: { lat: 28.943518, lon: -81.962257 } },
+    ],
+
+    Palms: [
+      { hole: 1, par: 5, hcp: 7, tee: { lat: 28.944702, lon: -81.965242 }, green: { lat: 28.945720, lon: -81.969075 } },
+      { hole: 2, par: 4, hcp: 8, tee: { lat: 28.946165, lon: -81.967757 }, green: { lat: 28.945518, lon: -81.965265 } },
+      { hole: 3, par: 3, hcp: 6, tee: { lat: 28.946032, lon: -81.964369 }, green: { lat: 28.947056, lon: -81.963950 } },
+      { hole: 4, par: 5, hcp: 1, tee: { lat: 28.948203, lon: -81.964291 }, green: { lat: 28.949890, lon: -81.967677 } },
+      { hole: 5, par: 4, hcp: 3, tee: { lat: 28.950378, lon: -81.966648 }, green: { lat: 28.949568, lon: -81.963874 } },
+      { hole: 6, par: 4, hcp: 4, tee: { lat: 28.950337, lon: -81.971078 }, green: { lat: 28.950062, lon: -81.968618 } },
+      { hole: 7, par: 4, hcp: 2, tee: { lat: 28.950445, lon: -81.966336 }, green: { lat: 28.949554, lon: -81.963888 } },
+      { hole: 8, par: 3, hcp: 9, tee: { lat: 28.949291, lon: -81.963167 }, green: { lat: 28.948474, lon: -81.962780 } },
+      { hole: 9, par: 4, hcp: 5, tee: { lat: 28.947636, lon: -81.962638 }, green: { lat: 28.945487, lon: -81.964006 } },
+    ],
+  },
+};
+
 export const COURSE_CATALOG = {
   "Belle Glades": BELLE_GLADES,
   "Orange Blossom": ORANGE_BLOSSOM,
   "Broad Stripes Golf": BROAD_STRIPES,
+  "Hacienda Hills": HACIENDA_HILLS,
 };
