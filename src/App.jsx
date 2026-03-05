@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-01";
+const TEST_SYNC_ID = "TEST-02";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -512,7 +512,11 @@ export default function App() {
     if (!hole || !clubKey || !teeBox) return;
     if (!pos?.lat || !pos?.lon) return;
 
-    if (!window.confirm("Update Tee?\n\nThis will save your CURRENT GPS position as the tee for this hole + tee box.")) {
+    if (
+      !window.confirm(
+        "Update Tee?\n\nThis will save your CURRENT GPS position as the tee for this hole + tee box."
+      )
+    ) {
       return;
     }
 
@@ -539,7 +543,11 @@ export default function App() {
     if (!hole || !clubKey || !teeBox) return;
     if (!pos?.lat || !pos?.lon) return;
 
-    if (!window.confirm("Update Green?\n\nThis will save your CURRENT GPS position as the green for this hole + tee box.")) {
+    if (
+      !window.confirm(
+        "Update Green?\n\nThis will save your CURRENT GPS position as the green for this hole + tee box."
+      )
+    ) {
       return;
     }
 
@@ -666,7 +674,11 @@ export default function App() {
   function resetCrossCal() {
     if (!crossCalKey) return;
 
-    if (!window.confirm("Reset cross calibration for this hole?\n\nThis will set Cal scale back to 1.000.")) {
+    if (
+      !window.confirm(
+        "Reset cross calibration for this hole?\n\nThis will set Cal scale back to 1.000."
+      )
+    ) {
       return;
     }
 
@@ -750,16 +762,16 @@ export default function App() {
     const dy = C.y - A.y;
     const len = Math.hypot(dx, dy);
     if (!isFinite(len) || len < 0.0001)
-      return { base, perpRight: { x: 0, y: 0 } };
+      return { base, perpRight: { x: 0, y: 0 }, t };
 
     // Perp RIGHT in screen coords (x right, y down)
     const perpRight = { x: -dy / len, y: dx / len };
 
-    return { base, perpRight };
+    return { base, perpRight, t };
   }, [teeLL, greenLL, pos, A, C]);
 
   // YOU dot (centerline + optional offset)
-  const youNorm = useMemo(() => {
+  const youNormRaw = useMemo(() => {
     if (!teeLL || !greenLL || !pos || !A || !C) return null;
 
     if (
@@ -797,8 +809,40 @@ export default function App() {
     crossScaledYardsSigned,
   ]);
 
+  // ===== Trust + Freeze (Phase 4B) =====
+  const trustLevel = useMemo(() => {
+    const a = pos?.accuracyMeters;
+    if (a == null || !isFinite(a)) return "—";
+    if (a <= 10) return "HIGH";
+    if (a <= 25) return "OK";
+    return "LOW";
+  }, [pos?.accuracyMeters]);
+
+  const trustIsLow = trustLevel === "LOW";
+
+  const lastGoodYouRef = useRef(null);
+  useEffect(() => {
+    if (!trustIsLow && youNormRaw && isFinite(youNormRaw.x) && isFinite(youNormRaw.y)) {
+      lastGoodYouRef.current = youNormRaw;
+    }
+  }, [trustIsLow, youNormRaw]);
+
+  const youNorm = trustIsLow ? lastGoodYouRef.current : youNormRaw;
+
+  // ===== Progress down hole (for tee departure) =====
+  const alongFromTeeYards = useMemo(() => {
+    const t = basePointAndPerp?.t;
+    if (typeof t !== "number") return null;
+    if (typeof teeToGreenYards !== "number") return null;
+    return Math.max(0, Math.min(teeToGreenYards, t * teeToGreenYards));
+  }, [basePointAndPerp, teeToGreenYards]);
+
   function calibrateUsingTargetB() {
-    if (!window.confirm("Calibrate using Target B?\n\nStand at a real landmark.\nDrag Target B onto that landmark on the image.\nThen press OK to save Cal scale for this hole.")) {
+    if (
+      !window.confirm(
+        "Calibrate using Target B?\n\nStand at a real landmark.\nDrag Target B onto that landmark on the image.\nThen press OK to save Cal scale for this hole."
+      )
+    ) {
       return;
     }
 
@@ -929,13 +973,63 @@ export default function App() {
     setStartHoleDisplay("1");
     setIdx(0);
 
-    window.alert("Fresh start is armed.\nYou can exit the app now.\nNext open will be a clean Home screen.");
+    window.alert(
+      "Fresh start is armed.\nYou can exit the app now.\nNext open will be a clean Home screen."
+    );
   }
 
   const fixAgeSec =
     lastFixMs > 0
       ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000))
       : null;
+
+  // ===== Phase 4: DRIVE vs AIM mode (no buttons) =====
+  // DRIVE: only cart icon
+  // AIM: show A/B/C + lines
+  const [viewMode, setViewMode] = useState("aim"); // "aim" | "drive"
+  const lastInteractMsRef = useRef(Date.now());
+  const idleTimerRef = useRef(null);
+
+  function markUserInteraction() {
+    lastInteractMsRef.current = Date.now();
+    setViewMode("aim");
+
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      // after 12s of no interaction => DRIVE
+      setViewMode("drive");
+    }, 12000);
+  }
+
+  // Reset to AIM when hole changes or when you enter Play
+  useEffect(() => {
+    if (page !== "play") return;
+    setViewMode("aim");
+    lastInteractMsRef.current = Date.now();
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => setViewMode("drive"), 12000);
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, holeKey]);
+
+  // Automatic tee departure: after ~100 yards down hole, go DRIVE (unless you just interacted)
+  useEffect(() => {
+    if (page !== "play") return;
+    if (trustIsLow) return;
+    if (alongFromTeeYards == null) return;
+    if (alongFromTeeYards < 100) return;
+
+    const age = Date.now() - (lastInteractMsRef.current || 0);
+
+    // If you've been hands-off for at least 2 seconds, switch to DRIVE.
+    // (If you just tapped/dragged, keep AIM and let the 12s timer handle it.)
+    if (age > 2000) {
+      setViewMode("drive");
+    }
+  }, [page, alongFromTeeYards, trustIsLow]);
 
   return (
     <div
@@ -1104,34 +1198,38 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {/* Arrow boxes */}
-            {!Bactive && (
-              <ArrowYardBox
-                left={ARROW_LEFT}
-                top={ARROW_TOP_AC}
-                yards={
-                  typeof modeledTotalYards === "number"
-                    ? modeledTotalYards
-                    : teeToGreenYards
-                }
-              />
-            )}
-            {Bactive && (
-              <ArrowYardBox
-                left={ARROW_LEFT}
-                top={ARROW_TOP_BC}
-                yards={targetToGreenYards}
-              />
-            )}
-            {Bactive && (
-              <ArrowYardBox
-                left={ARROW_LEFT}
-                top={ARROW_TOP_AB}
-                yards={teeToTargetYards}
-              />
+            {/* Arrow boxes (AIM MODE ONLY) */}
+            {viewMode === "aim" && (
+              <>
+                {!Bactive && (
+                  <ArrowYardBox
+                    left={ARROW_LEFT}
+                    top={ARROW_TOP_AC}
+                    yards={
+                      typeof modeledTotalYards === "number"
+                        ? modeledTotalYards
+                        : teeToGreenYards
+                    }
+                  />
+                )}
+                {Bactive && (
+                  <ArrowYardBox
+                    left={ARROW_LEFT}
+                    top={ARROW_TOP_BC}
+                    yards={targetToGreenYards}
+                  />
+                )}
+                {Bactive && (
+                  <ArrowYardBox
+                    left={ARROW_LEFT}
+                    top={ARROW_TOP_AB}
+                    yards={teeToTargetYards}
+                  />
+                )}
+              </>
             )}
 
-            {/* Overlay + YOU dot */}
+            {/* Overlay + YOU cart */}
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -1141,6 +1239,8 @@ export default function App() {
                 allowPlayB={true}
                 youNorm={youNorm}
                 youAccuracyMeters={pos?.accuracyMeters ?? null}
+                viewMode={viewMode}                 // ✅ NEW
+                onUserInteract={markUserInteraction} // ✅ NEW (tap/drag resets 12s timer + AIM)
                 onStateChange={(state) => setLiveOverlay(state)}
                 onActionsReady={(actions) => {
                   overlayActionsRef.current = actions;
@@ -1197,16 +1297,7 @@ export default function App() {
                 </div>
 
                 <div style={{ marginBottom: 6 }}>
-                  Trust:{" "}
-                  <b>
-                    {pos?.accuracyMeters != null
-                      ? pos.accuracyMeters <= 10
-                        ? "HIGH"
-                        : pos.accuracyMeters <= 25
-                          ? "OK"
-                          : "LOW"
-                      : "—"}
-                  </b>
+                  Trust: <b>{trustLevel}</b>
                 </div>
 
                 <div>
@@ -1214,7 +1305,14 @@ export default function App() {
                   <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
                 </div>
 
-                <div>
+                <div style={{ marginTop: 4 }}>
+                  Along:{" "}
+                  <b>
+                    {alongFromTeeYards != null ? `${Math.round(alongFromTeeYards)} yd` : "—"}
+                  </b>
+                </div>
+
+                <div style={{ marginTop: 4 }}>
                   Cross: <b>{crossText}</b>
                 </div>
 

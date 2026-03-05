@@ -13,7 +13,6 @@ const HIT_B = 54;
 const HIT_C = 46;
 
 // ✅ Ring scale adjustment
-// You asked: “make accuracy ring larger by 25%”
 const ACCURACY_RING_SCALE = 1.25;
 
 function normPoint(p, fallback) {
@@ -46,24 +45,13 @@ function closestPointOnSegment(P, A, B) {
   return { x: A.x + t * ABx, y: A.y + t * ABy };
 }
 
-// Map accuracy meters to a "visual ring radius" in pixels.
-// We had scaled it down ~65% (x0.35). Now we make that ring 25% bigger.
 function ringPxFromAccuracy(accuracyMeters) {
   if (typeof accuracyMeters !== "number" || !isFinite(accuracyMeters)) return 10;
 
   const m = Math.max(1, Math.min(30, accuracyMeters)); // clamp 1..30m
-
-  // Base visual scale:
-  // 1m => ~8px, 30m => ~60px
   const base = 8 + (m - 1) * (52 / 29);
-
-  // Previous shrink:
   const shrunk = base * 0.35;
-
-  // ✅ Now +25%
   const scaled = shrunk * ACCURACY_RING_SCALE;
-
-  // Keep a sensible minimum so you can still see it
   return Math.max(6, scaled);
 }
 
@@ -79,6 +67,9 @@ export default function HoleOverlay({
 
   youNorm = null,
   youAccuracyMeters = null,
+
+  viewMode = "aim",        // ✅ NEW: "aim" | "drive"
+  onUserInteract = null,   // ✅ NEW: called on tap/drag
 
   onStateChange,
   onActionsReady,
@@ -184,6 +175,8 @@ export default function HoleOverlay({
     e.preventDefault();
     e.stopPropagation();
 
+    if (onUserInteract) onUserInteract();
+
     if (!canDrag(which)) return;
 
     if (which === "B") {
@@ -218,6 +211,8 @@ export default function HoleOverlay({
     const p = getNormFromPointer(e);
     if (!p) return;
 
+    if (onUserInteract) onUserInteract();
+
     if (dragging === "A") {
       setA({ x: p.x, y: p.y });
       return;
@@ -235,11 +230,33 @@ export default function HoleOverlay({
     }
   }
 
+  // ✅ Phase 4: Single tap anywhere sets Target B (not just on the line)
+  function onContainerPointerDown(e) {
+    // If you tap the background:
+    // - set B to tap location
+    // - enable B
+    // - begin dragging B immediately (so a tap+drag works)
+    // In DRIVE mode, this is how you instantly get AIM back.
+    if (!allowPlayB && !setupEnabled) return;
+
+    const p = getNormFromPointer(e);
+    if (!p) return;
+
+    if (onUserInteract) onUserInteract();
+
+    setBpos({ x: p.x, y: p.y });
+    setBactive(true);
+    setDragging("B");
+  }
+
+  // Old line-tap behavior kept (still works in AIM mode)
   function onLinePointerDown(e) {
     if (!setupEnabled && !allowPlayB) return;
 
     e.preventDefault();
     e.stopPropagation();
+
+    if (onUserInteract) onUserInteract();
 
     const p = getNormFromPointer(e);
     if (!p || !rect) return;
@@ -257,6 +274,7 @@ export default function HoleOverlay({
     const cp = closestPointOnSegment(p.px, Apx, Cpx);
     setBpos({ x: clamp01(cp.x / rect.width), y: clamp01(cp.y / rect.height) });
     setBactive(true);
+    setDragging("B");
   }
 
   const Apx = rect ? pxFromNorm(A, rect) : { x: 0, y: 0 };
@@ -265,12 +283,16 @@ export default function HoleOverlay({
 
   const lineClickable = setupEnabled || allowPlayB;
 
-  // ✅ YOU DOT SMOOTHING
+  // ✅ YOU smoothing (kept)
   const [youSmooth, setYouSmooth] = useState(null);
   const animRef = useRef({ raf: 0, from: null, to: null, t0: 0 });
 
   useEffect(() => {
-    if (!youNorm || typeof youNorm.x !== "number" || typeof youNorm.y !== "number") {
+    if (
+      !youNorm ||
+      typeof youNorm.x !== "number" ||
+      typeof youNorm.y !== "number"
+    ) {
       if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
       animRef.current = { raf: 0, from: null, to: null, t0: 0 };
       setYouSmooth(null);
@@ -289,11 +311,18 @@ export default function HoleOverlay({
     const DURATION_MS = 350;
 
     const step = (now) => {
-      const t = Math.max(0, Math.min(1, (now - animRef.current.t0) / DURATION_MS));
+      const t = Math.max(
+        0,
+        Math.min(1, (now - animRef.current.t0) / DURATION_MS)
+      );
       const e = 1 - Math.pow(1 - t, 3);
 
-      const x = animRef.current.from.x + (animRef.current.to.x - animRef.current.from.x) * e;
-      const y = animRef.current.from.y + (animRef.current.to.y - animRef.current.from.y) * e;
+      const x =
+        animRef.current.from.x +
+        (animRef.current.to.x - animRef.current.from.x) * e;
+      const y =
+        animRef.current.from.y +
+        (animRef.current.to.y - animRef.current.from.y) * e;
 
       setYouSmooth({ x, y });
 
@@ -325,6 +354,7 @@ export default function HoleOverlay({
         touchAction: "none",
         userSelect: "none",
       }}
+      onPointerDown={onContainerPointerDown} // ✅ NEW: tap anywhere sets target
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
@@ -343,104 +373,126 @@ export default function HoleOverlay({
         draggable={false}
       />
 
-      <svg
-        width="100%"
-        height="100%"
-        style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none" }}
-      >
-        {!Bactive ? (
-          <>
-            <line x1={Apx.x} y1={Apx.y} x2={Cpx.x} y2={Cpx.y} stroke="lime" strokeWidth="3" />
-            <line
-              x1={Apx.x}
-              y1={Apx.y}
-              x2={Cpx.x}
-              y2={Cpx.y}
-              stroke="rgba(0,0,0,0)"
-              strokeWidth="26"
-              style={{ pointerEvents: lineClickable ? "stroke" : "none" }}
-              onPointerDown={onLinePointerDown}
+      {/* AIM MODE: lines + markers */}
+      {viewMode === "aim" && (
+        <>
+          <svg
+            width="100%"
+            height="100%"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              pointerEvents: "none",
+            }}
+          >
+            {!Bactive ? (
+              <>
+                <line
+                  x1={Apx.x}
+                  y1={Apx.y}
+                  x2={Cpx.x}
+                  y2={Cpx.y}
+                  stroke="lime"
+                  strokeWidth="3"
+                />
+                <line
+                  x1={Apx.x}
+                  y1={Apx.y}
+                  x2={Cpx.x}
+                  y2={Cpx.y}
+                  stroke="rgba(0,0,0,0)"
+                  strokeWidth="26"
+                  style={{ pointerEvents: lineClickable ? "stroke" : "none" }}
+                  onPointerDown={onLinePointerDown}
+                />
+              </>
+            ) : (
+              <>
+                <line
+                  x1={Apx.x}
+                  y1={Apx.y}
+                  x2={Bpx.x}
+                  y2={Bpx.y}
+                  stroke="lime"
+                  strokeWidth="3"
+                />
+                <line
+                  x1={Bpx.x}
+                  y1={Bpx.y}
+                  x2={Cpx.x}
+                  y2={Cpx.y}
+                  stroke="lime"
+                  strokeWidth="3"
+                />
+              </>
+            )}
+          </svg>
+
+          {/* Accuracy ring (kept) */}
+          {youSmooth && (
+            <div
+              style={{
+                position: "absolute",
+                left: `${youSmooth.x * 100}%`,
+                top: `${youSmooth.y * 100}%`,
+                transform: "translate(-50%, -50%)",
+                zIndex: 4,
+                pointerEvents: "none",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  width: ringPx * 2,
+                  height: ringPx * 2,
+                  borderRadius: 999,
+                  border: "2px solid rgba(0,140,255,0.85)",
+                  background: "rgba(0,140,255,0.12)",
+                  boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
+                }}
+              />
+            </div>
+          )}
+
+          <Marker
+            kind="A"
+            norm={A}
+            onDown={(e) => onPointerDown("A", e)}
+            pointerEnabled={true}
+            cursor={"grab"}
+            hitSize={HIT_A}
+          />
+
+          {Bactive && (
+            <Marker
+              kind="B"
+              norm={Bpos}
+              onDown={(e) => onPointerDown("B", e)}
+              pointerEnabled={setupEnabled || allowPlayB}
+              cursor={setupEnabled || allowPlayB ? "grab" : "default"}
+              hitSize={HIT_B}
             />
-          </>
-        ) : (
-          <>
-            <line x1={Apx.x} y1={Apx.y} x2={Bpx.x} y2={Bpx.y} stroke="lime" strokeWidth="3" />
-            <line x1={Bpx.x} y1={Bpx.y} x2={Cpx.x} y2={Cpx.y} stroke="lime" strokeWidth="3" />
-          </>
-        )}
-      </svg>
+          )}
 
-      {/* YOU DOT + ACCURACY RING */}
-      {youSmooth && (
-        <div
-          style={{
-            position: "absolute",
-            left: `${youSmooth.x * 100}%`,
-            top: `${youSmooth.y * 100}%`,
-            transform: "translate(-50%, -50%)",
-            zIndex: 4,
-            pointerEvents: "none",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              width: ringPx * 2,
-              height: ringPx * 2,
-              borderRadius: 999,
-              border: "2px solid rgba(0,140,255,0.85)",
-              background: "rgba(0,140,255,0.12)",
-              boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
-            }}
+          <Marker
+            kind="C"
+            norm={C}
+            onDown={(e) => onPointerDown("C", e)}
+            pointerEnabled={true}
+            cursor={"grab"}
+            hitSize={HIT_C}
           />
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              width: 14,
-              height: 14,
-              borderRadius: 999,
-              background: "rgb(0,140,255)",
-              border: "2px solid white",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.55)",
-            }}
-          />
-        </div>
+        </>
       )}
 
-      <Marker
-        kind="A"
-        norm={A}
-        onDown={(e) => onPointerDown("A", e)}
-        pointerEnabled={true}
-        cursor={"grab"}
-        hitSize={HIT_A}
-      />
-
-      {Bactive && (
-        <Marker
-          kind="B"
-          norm={Bpos}
-          onDown={(e) => onPointerDown("B", e)}
-          pointerEnabled={setupEnabled || allowPlayB}
-          cursor={setupEnabled || allowPlayB ? "grab" : "default"}
-          hitSize={HIT_B}
-        />
+      {/* DRIVE MODE: cart icon only */}
+      {viewMode === "drive" && youSmooth && (
+        <CartIcon norm={youSmooth} />
       )}
-
-      <Marker
-        kind="C"
-        norm={C}
-        onDown={(e) => onPointerDown("C", e)}
-        pointerEnabled={true}
-        cursor={"grab"}
-        hitSize={HIT_C}
-      />
     </div>
   );
 }
@@ -500,6 +552,97 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
           opacity: 0.95,
         }}
       />
+    </div>
+  );
+}
+
+// ✅ Simple cart: rectangle + 4 wheel ticks + center dot
+function CartIcon({ norm }) {
+  const W = 18;
+  const H = 26;
+
+  const wheel = 6; // tick length
+  const stroke = 2;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${norm.x * 100}%`,
+        top: `${norm.y * 100}%`,
+        transform: "translate(-50%, -50%)",
+        zIndex: 10,
+        pointerEvents: "none",
+      }}
+    >
+      <svg
+        width={W + 20}
+        height={H + 20}
+        viewBox={`0 0 ${W + 20} ${H + 20}`}
+        style={{ overflow: "visible" }}
+      >
+        {/* body */}
+        <rect
+          x={10}
+          y={10}
+          width={W}
+          height={H}
+          rx={3}
+          ry={3}
+          fill="rgba(255,255,255,0.92)"
+          stroke="black"
+          strokeWidth={stroke}
+        />
+
+        {/* wheels (simple ticks) */}
+        {/* left side */}
+        <line
+          x1={10}
+          y1={14}
+          x2={10 - wheel}
+          y2={14}
+          stroke="black"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+        <line
+          x1={10}
+          y1={10 + H - 4}
+          x2={10 - wheel}
+          y2={10 + H - 4}
+          stroke="black"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+
+        {/* right side */}
+        <line
+          x1={10 + W}
+          y1={14}
+          x2={10 + W + wheel}
+          y2={14}
+          stroke="black"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+        <line
+          x1={10 + W}
+          y1={10 + H - 4}
+          x2={10 + W + wheel}
+          y2={10 + H - 4}
+          stroke="black"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+
+        {/* center dot */}
+        <circle
+          cx={10 + W / 2}
+          cy={10 + H / 2}
+          r={2.5}
+          fill="black"
+        />
+      </svg>
     </div>
   );
 }
