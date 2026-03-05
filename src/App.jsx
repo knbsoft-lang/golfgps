@@ -7,11 +7,15 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-22";
+const TEST_SYNC_ID = "TEST-01";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
+
+// ===== Session persistence (resume where you left off) =====
+const SESSION_KEY = "golfgps_lastSession_v1";
+const FRESH_ON_NEXT_OPEN_KEY = "golfgps_freshOnNextOpen_v1";
 
 function defaultParForHole(holeNumber) {
   const cycle = [4, 3, 5];
@@ -69,7 +73,7 @@ function buildRound(club, mode, nineA, nineB) {
 }
 
 /**
- * Bearing-based projection (great-circle-ish) to compute progress along Tee->Green.
+ * Bearing-based projection to compute progress along Tee->Green.
  * Returns t in [0..1]
  */
 function projectAlongTeeGreen(tee, green, pos) {
@@ -235,64 +239,6 @@ function saveTGOverride(clubKey, nineName, holeNum, teeBox, patch) {
   return next;
 }
 
-function resetTGOverrideField(
-  clubKey,
-  nineName,
-  holeNum,
-  teeBox,
-  field /* 'tee' | 'green' */
-) {
-  const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
-  const prev = loadTGOverride(clubKey, nineName, holeNum, teeBox) || {};
-  if (!prev || typeof prev !== "object") return null;
-
-  const next = { ...prev };
-  delete next[field];
-
-  const hasAny =
-    (next.tee && typeof next.tee === "object") ||
-    (next.green && typeof next.green === "object");
-
-  try {
-    if (hasAny) localStorage.setItem(key, JSON.stringify(next));
-    else localStorage.removeItem(key);
-  } catch {}
-
-  return hasAny ? next : null;
-}
-
-// ===== Backup Export/Import (ALL golfgps_* keys) =====
-function collectGolfGpsStorage() {
-  const out = {};
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith("golfgps_")) out[k] = localStorage.getItem(k);
-    }
-  } catch {}
-  return out;
-}
-
-function downloadTextFile(filename, text, mime = "application/json") {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function todayYMD() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 export default function App() {
   const [page, setPage] = useState("home");
 
@@ -316,6 +262,45 @@ export default function App() {
   const [mode, setMode] = useState("");
   const [nineA, setNineA] = useState("");
   const [nineB, setNineB] = useState("");
+
+  // ===== Restore session on load (unless CLOSE was pressed) =====
+  const pendingRestoreRef = useRef(null);
+  const didInitRestoreRef = useRef(false);
+
+  useEffect(() => {
+    if (didInitRestoreRef.current) return;
+    didInitRestoreRef.current = true;
+
+    try {
+      const fresh = localStorage.getItem(FRESH_ON_NEXT_OPEN_KEY) === "1";
+      if (fresh) {
+        localStorage.removeItem(FRESH_ON_NEXT_OPEN_KEY);
+        localStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || typeof s !== "object") return;
+
+      // Apply selection state first; hole index/page will be applied after roundHoles is built.
+      setCourseType(s.courseType || "");
+      setClubKey(s.clubKey || "");
+      setMode(s.mode || "");
+      setNineA(s.nineA || "");
+      setNineB(s.nineB || "");
+      setTeeBox(s.teeBox || "");
+      setStartHoleDisplay(String(s.startHoleDisplay || "1"));
+
+      pendingRestoreRef.current = {
+        page: s.page || "home",
+        desiredDisplayHole:
+          s.desiredDisplayHole != null ? parseInt(s.desiredDisplayHole, 10) : null,
+      };
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     setClubKey("");
@@ -385,6 +370,63 @@ export default function App() {
     () => setStartHoleDisplay("1"),
     [courseType, clubKey, mode, nineA, nineB]
   );
+
+  // Apply pending restore (once we have roundHoles)
+  useEffect(() => {
+    const p = pendingRestoreRef.current;
+    if (!p) return;
+    if (!roundHoles || roundHoles.length === 0) return;
+
+    const desired = p.desiredDisplayHole;
+    if (typeof desired === "number" && isFinite(desired)) {
+      const i = roundHoles.findIndex((h) => h.displayHole === desired);
+      if (i >= 0) setIdx(i);
+      else setIdx(0);
+    }
+
+    setPage(p.page === "play" ? "play" : "home");
+    pendingRestoreRef.current = null;
+  }, [roundHoles]);
+
+  // Save session as you use the app (debounced)
+  const saveTimerRef = useRef(null);
+  useEffect(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        const desiredDisplayHole = hole?.displayHole ?? null;
+        const payload = {
+          page,
+          courseType,
+          clubKey,
+          mode,
+          nineA,
+          nineB,
+          teeBox,
+          startHoleDisplay,
+          desiredDisplayHole,
+          t: Date.now(),
+        };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+      } catch {
+        // ignore
+      }
+    }, 250);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    page,
+    courseType,
+    clubKey,
+    mode,
+    nineA,
+    nineB,
+    teeBox,
+    startHoleDisplay,
+    idx,
+  ]);
 
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
@@ -470,6 +512,10 @@ export default function App() {
     if (!hole || !clubKey || !teeBox) return;
     if (!pos?.lat || !pos?.lon) return;
 
+    if (!window.confirm("Update Tee?\n\nThis will save your CURRENT GPS position as the tee for this hole + tee box.")) {
+      return;
+    }
+
     if (pos?.accuracyMeters != null && pos.accuracyMeters > 25) {
       window.alert(
         `GPS accuracy is LOW (${Math.round(
@@ -493,6 +539,10 @@ export default function App() {
     if (!hole || !clubKey || !teeBox) return;
     if (!pos?.lat || !pos?.lon) return;
 
+    if (!window.confirm("Update Green?\n\nThis will save your CURRENT GPS position as the green for this hole + tee box.")) {
+      return;
+    }
+
     if (pos?.accuracyMeters != null && pos.accuracyMeters > 25) {
       window.alert(
         `GPS accuracy is LOW (${Math.round(
@@ -510,99 +560,6 @@ export default function App() {
     window.alert(
       `Saved GREEN override\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\nLat ${pos.lat}\nLon ${pos.lon}`
     );
-  }
-
-  function handleResetTeeOverride() {
-    if (!hole || !clubKey || !teeBox) return;
-    const ok = window.confirm(
-      `Reset TEE override for:\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\n\nThis only affects THIS hole+tee box.`
-    );
-    if (!ok) return;
-    resetTGOverrideField(clubKey, hole.nine, hole.hole, teeBox, "tee");
-    setTgRev((n) => n + 1);
-    window.alert("TEE override reset for this hole.");
-  }
-
-  function handleResetGreenOverride() {
-    if (!hole || !clubKey || !teeBox) return;
-    const ok = window.confirm(
-      `Reset GREEN override for:\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\n\nThis only affects THIS hole+tee box.`
-    );
-    if (!ok) return;
-    resetTGOverrideField(clubKey, hole.nine, hole.hole, teeBox, "green");
-    setTgRev((n) => n + 1);
-    window.alert("GREEN override reset for this hole.");
-  }
-
-  // ===== Export / Import =====
-  const importFileInputRef = useRef(null);
-
-  function handleExportBackup() {
-    const data = {
-      meta: {
-        app: "GolfGPS",
-        version: "backup-v1",
-        date: new Date().toISOString(),
-        testSyncId: TEST_SYNC_ID,
-        buildId: BUILD_TEST_ID,
-      },
-      localStorage: collectGolfGpsStorage(),
-    };
-
-    const json = JSON.stringify(data, null, 2);
-    const fname = `GolfGPS_Backup_${todayYMD()}.json`;
-    downloadTextFile(fname, json);
-    window.alert(
-      `Backup exported:\n${fname}\n\nIt is saved in Downloads.\nCopy it to your PC for safekeeping.`
-    );
-  }
-
-  function handleClickImport() {
-    importFileInputRef.current?.click?.();
-  }
-
-  async function handleImportSelectedFile(e) {
-    const f = e.target.files?.[0] || null;
-    e.target.value = "";
-    if (!f) return;
-
-    try {
-      const text = await f.text();
-      const parsed = JSON.parse(text);
-
-      const bag = parsed?.localStorage;
-      if (!bag || typeof bag !== "object") {
-        window.alert("Import failed: file does not contain localStorage data.");
-        return;
-      }
-
-      const keys = Object.keys(bag).filter((k) => k.startsWith("golfgps_"));
-      if (!keys.length) {
-        window.alert("Import failed: no golfgps_* keys found in this file.");
-        return;
-      }
-
-      const ok = window.confirm(
-        `Import ${keys.length} items into tablet storage?\n\nThis will OVERWRITE any matching golfgps_* keys on this tablet.\n\nPress OK to import.`
-      );
-      if (!ok) return;
-
-      let written = 0;
-      for (const k of keys) {
-        try {
-          localStorage.setItem(k, String(bag[k]));
-          written++;
-        } catch {}
-      }
-
-      setTgRev((n) => n + 1);
-
-      window.alert(
-        `Import complete.\nWrote ${written} keys.\n\nTip: If you are currently on PLAY, go HOME then PLAY again to refresh any visuals.`
-      );
-    } catch (err) {
-      window.alert(`Import failed: ${err?.message || String(err)}`);
-    }
   }
 
   const teeToGreenYards = useMemo(() => {
@@ -708,6 +665,11 @@ export default function App() {
 
   function resetCrossCal() {
     if (!crossCalKey) return;
+
+    if (!window.confirm("Reset cross calibration for this hole?\n\nThis will set Cal scale back to 1.000.")) {
+      return;
+    }
+
     try {
       localStorage.removeItem(crossCalKey);
     } catch {}
@@ -836,6 +798,10 @@ export default function App() {
   ]);
 
   function calibrateUsingTargetB() {
+    if (!window.confirm("Calibrate using Target B?\n\nStand at a real landmark.\nDrag Target B onto that landmark on the image.\nThen press OK to save Cal scale for this hole.")) {
+      return;
+    }
+
     if (!basePointAndPerp) {
       window.alert("Calibrate failed: no base point yet (need GPS + A/C).");
       return;
@@ -857,6 +823,7 @@ export default function App() {
 
     const { base, perpRight } = basePointAndPerp;
 
+    // Signed normalized offset of B from base along perpRight
     const vx = B.x - base.x;
     const vy = B.y - base.y;
     const offsetNormSigned = vx * perpRight.x + vy * perpRight.y;
@@ -938,6 +905,33 @@ export default function App() {
     overlayActionsRef.current?.clearTarget?.();
   }
 
+  // CLOSE behavior: next open should start fresh
+  function handleCloseAndFreshNextOpen() {
+    const ok = window.confirm(
+      "CLOSE?\n\nNext time you open the app it will start fresh (Home screen).\n\nPress OK to enable fresh start."
+    );
+    if (!ok) return;
+
+    try {
+      localStorage.setItem(FRESH_ON_NEXT_OPEN_KEY, "1");
+      localStorage.removeItem(SESSION_KEY);
+    } catch {}
+
+    // Immediately return to a clean Home screen now too
+    setSetupEnabled(false);
+    setPage("home");
+    setCourseType("");
+    setClubKey("");
+    setMode("");
+    setNineA("");
+    setNineB("");
+    setTeeBox("");
+    setStartHoleDisplay("1");
+    setIdx(0);
+
+    window.alert("Fresh start is armed.\nYou can exit the app now.\nNext open will be a clean Home screen.");
+  }
+
   const fixAgeSec =
     lastFixMs > 0
       ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000))
@@ -952,15 +946,6 @@ export default function App() {
         minHeight: "100vh",
       }}
     >
-      {/* Hidden file input for Import */}
-      <input
-        ref={importFileInputRef}
-        type="file"
-        accept="application/json,.json"
-        onChange={handleImportSelectedFile}
-        style={{ display: "none" }}
-      />
-
       {/* HOME PAGE */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
@@ -1165,7 +1150,7 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* ✅ GPS DEBUG / TOOLS BOX — ONLY IN SETUP MODE */}
+            {/* GPS DEBUG (ONLY visible in SETUP MODE) */}
             {setupEnabled && (
               <div
                 style={{
@@ -1218,17 +1203,15 @@ export default function App() {
                       ? pos.accuracyMeters <= 10
                         ? "HIGH"
                         : pos.accuracyMeters <= 25
-                        ? "OK"
-                        : "LOW"
+                          ? "OK"
+                          : "LOW"
                       : "—"}
                   </b>
                 </div>
 
                 <div>
                   Tee→Green:{" "}
-                  <b>
-                    {teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}
-                  </b>
+                  <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
                 </div>
 
                 <div>
@@ -1331,70 +1314,6 @@ export default function App() {
                   >
                     Update Green
                   </button>
-
-                  <button
-                    onClick={handleResetTeeOverride}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "#f3f3f3",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                    title="Undo a bad tee save (this hole only)"
-                  >
-                    Reset Tee Override
-                  </button>
-
-                  <button
-                    onClick={handleResetGreenOverride}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "#f3f3f3",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                    title="Undo a bad green save (this hole only)"
-                  >
-                    Reset Green Override
-                  </button>
-
-                  <button
-                    onClick={handleExportBackup}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "white",
-                      fontWeight: 950,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                    title="Download a JSON backup of all saved golfgps_* data"
-                  >
-                    Export Backup
-                  </button>
-
-                  <button
-                    onClick={handleClickImport}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "#f3f3f3",
-                      fontWeight: 950,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                    title="Import a previously exported JSON backup"
-                  >
-                    Import Backup
-                  </button>
                 </div>
 
                 <div style={{ marginTop: 10, opacity: 0.85 }}>
@@ -1404,7 +1323,7 @@ export default function App() {
               </div>
             )}
 
-            {/* HOME + SETUP */}
+            {/* HOME + SETUP + CLOSE */}
             <button
               onClick={goHome}
               style={{
@@ -1444,6 +1363,28 @@ export default function App() {
               }}
             >
               SETUP
+            </button>
+
+            {/* ✅ CLOSE button under SETUP */}
+            <button
+              onClick={handleCloseAndFreshNextOpen}
+              style={{
+                position: "fixed",
+                right: 10,
+                top: TOP_BTN_TOP + TOP_BTN_H + 8,
+                width: TOP_BTN_W,
+                height: 38,
+                borderRadius: 12,
+                border: "1px solid #333",
+                background: "#f3f3f3",
+                color: "black",
+                fontWeight: 950,
+                fontSize: 14,
+                zIndex: 10000,
+              }}
+              title="Press this if you want the app to start fresh next time you open it"
+            >
+              CLOSE
             </button>
 
             {/* SETUP CONTROLS */}
