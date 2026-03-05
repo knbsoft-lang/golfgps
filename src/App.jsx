@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-02";
+const TEST_SYNC_ID = "TEST-03";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -1198,36 +1198,45 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {/* Arrow boxes (AIM MODE ONLY) */}
-            {viewMode === "aim" && (
-              <>
-                {!Bactive && (
-                  <ArrowYardBox
-                    left={ARROW_LEFT}
-                    top={ARROW_TOP_AC}
-                    yards={
-                      typeof modeledTotalYards === "number"
-                        ? modeledTotalYards
-                        : teeToGreenYards
-                    }
-                  />
-                )}
-                {Bactive && (
-                  <ArrowYardBox
-                    left={ARROW_LEFT}
-                    top={ARROW_TOP_BC}
-                    yards={targetToGreenYards}
-                  />
-                )}
-                {Bactive && (
-                  <ArrowYardBox
-                    left={ARROW_LEFT}
-                    top={ARROW_TOP_AB}
-                    yards={teeToTargetYards}
-                  />
-                )}
-              </>
-            )}
+            {/* Arrow boxes */}
+{viewMode === "aim" && (
+  <>
+    {!Bactive && (
+      <ArrowYardBox
+        left={ARROW_LEFT}
+        top={ARROW_TOP_AC}
+        yards={
+          typeof modeledTotalYards === "number"
+            ? modeledTotalYards
+            : teeToGreenYards
+        }
+      />
+    )}
+    {Bactive && (
+      <ArrowYardBox
+        left={ARROW_LEFT}
+        top={ARROW_TOP_BC}
+        yards={targetToGreenYards}
+      />
+    )}
+    {Bactive && (
+      <ArrowYardBox
+        left={ARROW_LEFT}
+        top={ARROW_TOP_AB}
+        yards={teeToTargetYards}
+      />
+    )}
+  </>
+)}
+
+{/* ✅ DRIVE MODE: always show You→Green arrow box while cart icon is shown */}
+{viewMode === "drive" && (
+  <ArrowYardBox
+    left={ARROW_LEFT}
+    top={ARROW_TOP_AC}
+    yards={typeof youToGreenYards === "number" ? youToGreenYards : null}
+  />
+)}
 
             {/* Overlay + YOU cart */}
             {imgSrc ? (
