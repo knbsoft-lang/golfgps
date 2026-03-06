@@ -558,11 +558,15 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
 
 // ✅ Simple cart: rectangle + 4 wheel ticks + center dot
 function CartIcon({ norm }) {
-  const W = 22;
-  const H = 31;
+  const W = 24; // larger
+  const H = 34; // larger
 
-  const wheel = 7;
-  const stroke = 2;
+  const stroke = 2.4;
+  const wheelInset = 4;
+  const wheelLen = 7;
+
+  const x = 12;
+  const y = 12;
 
   return (
     <div
@@ -573,68 +577,73 @@ function CartIcon({ norm }) {
         transform: "translate(-50%, -50%)",
         zIndex: 10,
         pointerEvents: "none",
+        filter: "drop-shadow(0 0 6px rgba(0,0,0,0.85)) drop-shadow(0 2px 8px rgba(0,0,0,0.65))",
       }}
     >
       <svg
-        width={W + 22}
-        height={H + 22}
-        viewBox={`0 0 ${W + 22} ${H + 22}`}
+        width={W + 24}
+        height={H + 24}
+        viewBox={`0 0 ${W + 24} ${H + 24}`}
         style={{ overflow: "visible" }}
       >
+        {/* body */}
         <rect
-          x={11}
-          y={11}
+          x={x}
+          y={y}
           width={W}
           height={H}
-          rx={3}
-          ry={3}
-          fill="rgba(0,120,255,0.50)"
+          rx={4}
+          ry={4}
+          fill="rgba(0,170,255,0.78)"
           stroke="white"
           strokeWidth={stroke}
         />
 
+        {/* inside vertical wheels - left side */}
         <line
-          x1={11}
-          y1={15}
-          x2={11 - wheel}
-          y2={15}
+          x1={x + wheelInset}
+          y1={y + 6}
+          x2={x + wheelInset}
+          y2={y + 6 + wheelLen}
           stroke="white"
           strokeWidth={stroke}
           strokeLinecap="round"
         />
         <line
-          x1={11}
-          y1={11 + H - 4}
-          x2={11 - wheel}
-          y2={11 + H - 4}
-          stroke="white"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-
-        <line
-          x1={11 + W}
-          y1={15}
-          x2={11 + W + wheel}
-          y2={15}
-          stroke="white"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-        <line
-          x1={11 + W}
-          y1={11 + H - 4}
-          x2={11 + W + wheel}
-          y2={11 + H - 4}
+          x1={x + wheelInset}
+          y1={y + H - 6 - wheelLen}
+          x2={x + wheelInset}
+          y2={y + H - 6}
           stroke="white"
           strokeWidth={stroke}
           strokeLinecap="round"
         />
 
+        {/* inside vertical wheels - right side */}
+        <line
+          x1={x + W - wheelInset}
+          y1={y + 6}
+          x2={x + W - wheelInset}
+          y2={y + 6 + wheelLen}
+          stroke="white"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+        <line
+          x1={x + W - wheelInset}
+          y1={y + H - 6 - wheelLen}
+          x2={x + W - wheelInset}
+          y2={y + H - 6}
+          stroke="white"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+
+        {/* center dot */}
         <circle
-          cx={11 + W / 2}
-          cy={11 + H / 2}
-          r={2.5}
+          cx={x + W / 2}
+          cy={y + H / 2}
+          r={3}
           fill="white"
         />
       </svg>
