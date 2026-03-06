@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-04";
+const TEST_SYNC_ID = "TEST-05";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -983,31 +983,44 @@ export default function App() {
       ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000))
       : null;
 
-  // ===== Phase 4: DRIVE vs AIM mode (no buttons) =====
+   // ===== Phase 4: DRIVE vs AIM mode (no buttons) =====
   // DRIVE: only cart icon
   // AIM: show A/B/C + lines
   const [viewMode, setViewMode] = useState("aim"); // "aim" | "drive"
+  const [teeDepartureReached, setTeeDepartureReached] = useState(false);
   const lastInteractMsRef = useRef(Date.now());
   const idleTimerRef = useRef(null);
 
-    function markUserInteraction() {
+     function markUserInteraction() {
     lastInteractMsRef.current = Date.now();
     setViewMode("aim");
 
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+
+    // Do NOT start the 15-second timer until tee departure is reached
+    if (!teeDepartureReached) return;
+
     idleTimerRef.current = setTimeout(() => {
-      // after 15s of no interaction => DRIVE
       setViewMode("drive");
     }, 15000);
   }
 
-    // Reset to AIM when hole changes or when you enter Play
+      // Reset to AIM when hole changes or when you enter Play
   useEffect(() => {
     if (page !== "play") return;
+
     setViewMode("aim");
+    setTeeDepartureReached(false);
     lastInteractMsRef.current = Date.now();
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setViewMode("drive"), 15000);
+
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
@@ -1015,21 +1028,27 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, holeKey]);
 
-  // Automatic tee departure: after ~100 yards down hole, go DRIVE (unless you just interacted)
+    // Tee departure logic:
+  // Before 100 yd: always stay in AIM mode, no timeout.
+  // After 100 yd: enable normal 15-second inactivity behavior.
   useEffect(() => {
     if (page !== "play") return;
+    if (teeDepartureReached) return;
     if (trustIsLow) return;
     if (alongFromTeeYards == null) return;
     if (alongFromTeeYards < 100) return;
 
-    const age = Date.now() - (lastInteractMsRef.current || 0);
+    setTeeDepartureReached(true);
 
-    // If you've been hands-off for at least 2 seconds, switch to DRIVE.
-    // (If you just tapped/dragged, keep AIM and let the 12s timer handle it.)
-    if (age > 2000) {
-      setViewMode("drive");
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
     }
-  }, [page, alongFromTeeYards, trustIsLow]);
+
+    idleTimerRef.current = setTimeout(() => {
+      setViewMode("drive");
+    }, 15000);
+  }, [page, alongFromTeeYards, trustIsLow, teeDepartureReached]);
 
   return (
     <div
