@@ -558,10 +558,10 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
 
 // ✅ Simple cart: rectangle + 4 wheel ticks + center dot
 function CartIcon({ norm }) {
-  const W = 18;
-  const H = 26;
+  const W = 22;
+  const H = 31;
 
-  const wheel = 6; // tick length
+  const wheel = 7;
   const stroke = 2;
 
   return (
@@ -576,71 +576,66 @@ function CartIcon({ norm }) {
       }}
     >
       <svg
-        width={W + 20}
-        height={H + 20}
-        viewBox={`0 0 ${W + 20} ${H + 20}`}
+        width={W + 22}
+        height={H + 22}
+        viewBox={`0 0 ${W + 22} ${H + 22}`}
         style={{ overflow: "visible" }}
       >
-        {/* body */}
         <rect
-          x={10}
-          y={10}
+          x={11}
+          y={11}
           width={W}
           height={H}
           rx={3}
           ry={3}
-          fill="rgba(255,255,255,0.92)"
-          stroke="black"
+          fill="rgba(0,120,255,0.50)"
+          stroke="white"
           strokeWidth={stroke}
         />
 
-        {/* wheels (simple ticks) */}
-        {/* left side */}
         <line
-          x1={10}
-          y1={14}
-          x2={10 - wheel}
-          y2={14}
-          stroke="black"
+          x1={11}
+          y1={15}
+          x2={11 - wheel}
+          y2={15}
+          stroke="white"
           strokeWidth={stroke}
           strokeLinecap="round"
         />
         <line
-          x1={10}
-          y1={10 + H - 4}
-          x2={10 - wheel}
-          y2={10 + H - 4}
-          stroke="black"
+          x1={11}
+          y1={11 + H - 4}
+          x2={11 - wheel}
+          y2={11 + H - 4}
+          stroke="white"
           strokeWidth={stroke}
           strokeLinecap="round"
         />
 
-        {/* right side */}
         <line
-          x1={10 + W}
-          y1={14}
-          x2={10 + W + wheel}
-          y2={14}
-          stroke="black"
+          x1={11 + W}
+          y1={15}
+          x2={11 + W + wheel}
+          y2={15}
+          stroke="white"
           strokeWidth={stroke}
           strokeLinecap="round"
         />
         <line
-          x1={10 + W}
-          y1={10 + H - 4}
-          x2={10 + W + wheel}
-          y2={10 + H - 4}
-          stroke="black"
+          x1={11 + W}
+          y1={11 + H - 4}
+          x2={11 + W + wheel}
+          y2={11 + H - 4}
+          stroke="white"
           strokeWidth={stroke}
           strokeLinecap="round"
         />
 
-        {/* center dot */}
         <circle
-          cx={10 + W / 2}
-          cy={10 + H / 2}
+          cx={11 + W / 2}
+          cy={11 + H / 2}
           r={2.5}
-          fill="black"
+          fill="white"
         />
       </svg>
     </div>

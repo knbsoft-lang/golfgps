@@ -1,0 +1,1 @@
+dism /online /add-provisionedappxpackage /packagepath:C:\\DELL\0C7WX\0c7wx\0f67e5efb0594137be305d25e0273249.appx  /licensepath:C:\\DELL\0C7WX\0c7wx\0f67e5efb0594137be305d25e0273249_License1.xml /CustomDataPath=C:\\DELL\0C7WX\0c7wx\dell-metro.json

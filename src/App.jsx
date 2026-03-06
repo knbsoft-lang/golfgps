@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-03";
+const TEST_SYNC_ID = "TEST-04";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -990,24 +990,24 @@ export default function App() {
   const lastInteractMsRef = useRef(Date.now());
   const idleTimerRef = useRef(null);
 
-  function markUserInteraction() {
+    function markUserInteraction() {
     lastInteractMsRef.current = Date.now();
     setViewMode("aim");
 
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => {
-      // after 12s of no interaction => DRIVE
+      // after 15s of no interaction => DRIVE
       setViewMode("drive");
-    }, 12000);
+    }, 15000);
   }
 
-  // Reset to AIM when hole changes or when you enter Play
+    // Reset to AIM when hole changes or when you enter Play
   useEffect(() => {
     if (page !== "play") return;
     setViewMode("aim");
     lastInteractMsRef.current = Date.now();
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setViewMode("drive"), 12000);
+    idleTimerRef.current = setTimeout(() => setViewMode("drive"), 15000);
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
