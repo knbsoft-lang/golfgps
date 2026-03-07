@@ -489,9 +489,32 @@ export default function HoleOverlay({
         </>
       )}
 
-      {/* DRIVE MODE: cart icon only */}
+           {/* Cart always visible */}
+      {youSmooth && <CartIcon norm={youSmooth} />}
+
+      {/* DRIVE MODE: white line from cart to green center */}
       {viewMode === "drive" && youSmooth && (
-        <CartIcon norm={youSmooth} />
+        <svg
+          width="100%"
+          height="100%"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            pointerEvents: "none",
+            zIndex: 6,
+          }}
+        >
+          <line
+            x1={youSmooth.x * 100 + "%"}
+            y1={youSmooth.y * 100 + "%"}
+            x2={Cpx.x}
+            y2={Cpx.y}
+            stroke="white"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </svg>
       )}
     </div>
   );
