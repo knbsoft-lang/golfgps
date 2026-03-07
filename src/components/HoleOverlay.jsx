@@ -1,643 +1,349 @@
-// src/components/HoleOverlay.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { clamp01, getHoleDefaults, setHoleDefaults } from "../data/holeDefaults";
+import { useEffect, useRef, useState } from "react";
 
-const DEFAULT_A = { x: 0.5, y: 0.75 };
-const DEFAULT_C = { x: 0.5, y: 0.25 };
+/*
+HoleOverlay
 
-const BLOCK_B_NEAR_ENDPOINT_PX = 35;
-const DOUBLE_TAP_MS = 350;
+Props used by App.jsx
 
-const HIT_A = 46;
-const HIT_B = 54;
-const HIT_C = 46;
-
-// ✅ Ring scale adjustment
-const ACCURACY_RING_SCALE = 1.25;
-
-function normPoint(p, fallback) {
-  if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
-  return { x: clamp01(p.x), y: clamp01(p.y) };
-}
-
-function pxFromNorm(norm, rect) {
-  return { x: norm.x * rect.width, y: norm.y * rect.height };
-}
-
-function distPx(p1, p2) {
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  return Math.hypot(dx, dy);
-}
-
-function closestPointOnSegment(P, A, B) {
-  const ABx = B.x - A.x;
-  const ABy = B.y - A.y;
-  const APx = P.x - A.x;
-  const APy = P.y - A.y;
-
-  const ab2 = ABx * ABx + ABy * ABy;
-  if (ab2 === 0) return { x: A.x, y: A.y };
-
-  let t = (APx * ABx + APy * ABy) / ab2;
-  t = Math.max(0, Math.min(1, t));
-
-  return { x: A.x + t * ABx, y: A.y + t * ABy };
-}
-
-function ringPxFromAccuracy(accuracyMeters) {
-  if (typeof accuracyMeters !== "number" || !isFinite(accuracyMeters)) return 10;
-
-  const m = Math.max(1, Math.min(30, accuracyMeters)); // clamp 1..30m
-  const base = 8 + (m - 1) * (52 / 29);
-  const shrunk = base * 0.35;
-  const scaled = shrunk * ACCURACY_RING_SCALE;
-  return Math.max(6, scaled);
-}
+imageSrc
+resetKey
+holeKey
+setupEnabled
+allowPlayB
+viewMode
+youNorm
+youAccuracyMeters
+onUserInteract
+onStateChange
+onActionsReady
+*/
 
 export default function HoleOverlay({
   imageSrc,
   resetKey,
   holeKey,
-  initialA,
-  initialC,
-
-  setupEnabled = false,
-  allowPlayB = true,
-
-  youNorm = null,
-  youAccuracyMeters = null,
-
-  viewMode = "aim",        // ✅ NEW: "aim" | "drive"
-  onUserInteract = null,   // ✅ NEW: called on tap/drag
-
+  setupEnabled,
+  allowPlayB,
+  viewMode,
+  youNorm,
+  onUserInteract,
   onStateChange,
-  onActionsReady,
+  onActionsReady
 }) {
-  const containerRef = useRef(null);
+
+  const imgRef = useRef(null);
+
   const [rect, setRect] = useState(null);
 
-  const lastBTapMsRef = useRef(0);
+  const [A,setA] = useState({x:.5,y:.85});
+  const [B,setB] = useState({x:.5,y:.5});
+  const [C,setC] = useState({x:.5,y:.15});
+  const [Bactive,setBactive] = useState(false);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const el = containerRef.current;
+  const dragRef = useRef(null);
 
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      setRect({ width: r.width, height: r.height });
+  useEffect(()=>{
+    const r = imgRef.current?.getBoundingClientRect();
+    if(r) setRect(r);
+  },[imageSrc]);
+
+  useEffect(()=>{
+    onStateChange?.({
+      A,
+      B,
+      C,
+      Bactive
     });
+  },[A,B,C,Bactive]);
 
-    ro.observe(el);
-    const r0 = el.getBoundingClientRect();
-    setRect({ width: r0.width, height: r0.height });
+  useEffect(()=>{
+    onActionsReady?.({
+      clearTarget(){
+        setBactive(false);
+      },
+      saveDefaults(){
+        localStorage.setItem(
+          "golfgps_defaults_"+holeKey,
+          JSON.stringify({A,C})
+        );
+      },
+      getState(){
+        return {A,C};
+      }
+    });
+  },[A,C,holeKey]);
 
-    return () => ro.disconnect();
-  }, []);
+  function startDrag(pt,e){
+    e.preventDefault();
+    dragRef.current=pt;
+    onUserInteract?.();
+  }
 
-  const fallbackA = useMemo(() => normPoint(initialA, DEFAULT_A), []);
-  const fallbackC = useMemo(() => normPoint(initialC, DEFAULT_C), []);
+  function onMove(e){
+    if(!dragRef.current) return;
+    if(!rect) return;
 
-  const [A, setA] = useState(fallbackA);
-  const [C, setC] = useState(fallbackC);
+    const x=(e.clientX-rect.left)/rect.width;
+    const y=(e.clientY-rect.top)/rect.height;
 
-  const [Bpos, setBpos] = useState({
-    x: clamp01((fallbackA.x + fallbackC.x) / 2),
-    y: clamp01((fallbackA.y + fallbackC.y) / 2),
-  });
-  const [Bactive, setBactive] = useState(false);
-
-  const [dragging, setDragging] = useState(null);
-
-  useEffect(() => {
-    const saved = holeKey ? getHoleDefaults(holeKey) : null;
-
-    const nextA = saved?.A ? normPoint(saved.A, fallbackA) : fallbackA;
-    const nextC = saved?.C ? normPoint(saved.C, fallbackC) : fallbackC;
-
-    setA(nextA);
-    setC(nextC);
-
-    const mid = {
-      x: clamp01((nextA.x + nextC.x) / 2),
-      y: clamp01((nextA.y + nextC.y) / 2),
+    const p={
+      x:Math.max(0,Math.min(1,x)),
+      y:Math.max(0,Math.min(1,y))
     };
 
-    const nextB = saved?.B ? normPoint(saved.B, mid) : mid;
-    setBpos(nextB);
-
-    setBactive(!!saved?.Bactive);
-    setDragging(null);
-
-    lastBTapMsRef.current = 0;
-  }, [resetKey, holeKey, fallbackA, fallbackC]);
-
-  function getState() {
-    return { holeKey, A, C, B: Bpos, Bactive };
+    if(dragRef.current==="A") setA(p);
+    if(dragRef.current==="B") setB(p);
+    if(dragRef.current==="C") setC(p);
   }
 
-  function clearTarget() {
-    setBactive(false);
+  function stopDrag(){
+    dragRef.current=null;
   }
 
-  function saveDefaults() {
-    if (!holeKey) return;
-    setHoleDefaults(holeKey, { A, C, B: Bpos, Bactive });
-  }
+  useEffect(()=>{
+    window.addEventListener("pointermove",onMove);
+    window.addEventListener("pointerup",stopDrag);
+    return ()=>{
+      window.removeEventListener("pointermove",onMove);
+      window.removeEventListener("pointerup",stopDrag);
+    };
+  },[rect]);
 
-  useEffect(() => {
-    if (!onActionsReady) return;
-    onActionsReady({
-      saveDefaults,
-      clearTarget,
-      getState,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onActionsReady, holeKey, A, C, Bpos, Bactive]);
-
-  useEffect(() => {
-    if (!onStateChange) return;
-    onStateChange(getState());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holeKey, A, C, Bpos, Bactive]);
-
-  function endDrag() {
-    setDragging(null);
-  }
-
-  function canDrag(which) {
-    if (which === "A" || which === "C") return true;
-    if (which === "B") return setupEnabled || allowPlayB;
-    return false;
-  }
-
-  function onPointerDown(which, e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (onUserInteract) onUserInteract();
-
-    if (!canDrag(which)) return;
-
-    if (which === "B") {
-      if (!Bactive) return;
-
-      const now = Date.now();
-      if (now - lastBTapMsRef.current <= DOUBLE_TAP_MS) {
-        lastBTapMsRef.current = 0;
-        clearTarget();
-        setDragging(null);
-        return;
-      }
-      lastBTapMsRef.current = now;
-    }
-
-    setDragging(which);
-  }
-
-  function getNormFromPointer(e) {
-    if (!rect) return null;
-    const bounds = containerRef.current.getBoundingClientRect();
-    const px = { x: e.clientX - bounds.left, y: e.clientY - bounds.top };
+  function normToPx(p){
+    if(!rect) return {x:0,y:0};
     return {
-      x: clamp01(px.x / rect.width),
-      y: clamp01(px.y / rect.height),
-      px,
+      x:p.x*rect.width,
+      y:p.y*rect.height
     };
   }
 
-  function onPointerMove(e) {
-    if (!dragging) return;
-    const p = getNormFromPointer(e);
-    if (!p) return;
+  const Apx=normToPx(A);
+  const Bpx=normToPx(B);
+  const Cpx=normToPx(C);
 
-    if (onUserInteract) onUserInteract();
+  const cart=youNorm?normToPx(youNorm):null;
 
-    if (dragging === "A") {
-      setA({ x: p.x, y: p.y });
-      return;
-    }
+  function Marker({p,label,color,onDown}){
 
-    if (dragging === "C") {
-      setC({ x: p.x, y: p.y });
-      return;
-    }
+    const pos=normToPx(p);
 
-    if (dragging === "B") {
-      if (!Bactive) return;
-      if (!canDrag("B")) return;
-      setBpos({ x: p.x, y: p.y });
-    }
-  }
-
-  // ✅ Phase 4: Single tap anywhere sets Target B (not just on the line)
-  function onContainerPointerDown(e) {
-    // If you tap the background:
-    // - set B to tap location
-    // - enable B
-    // - begin dragging B immediately (so a tap+drag works)
-    // In DRIVE mode, this is how you instantly get AIM back.
-    if (!allowPlayB && !setupEnabled) return;
-
-    const p = getNormFromPointer(e);
-    if (!p) return;
-
-    if (onUserInteract) onUserInteract();
-
-    setBpos({ x: p.x, y: p.y });
-    setBactive(true);
-    setDragging("B");
-  }
-
-  // Old line-tap behavior kept (still works in AIM mode)
-  function onLinePointerDown(e) {
-    if (!setupEnabled && !allowPlayB) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (onUserInteract) onUserInteract();
-
-    const p = getNormFromPointer(e);
-    if (!p || !rect) return;
-
-    const Apx = pxFromNorm(A, rect);
-    const Cpx = pxFromNorm(C, rect);
-
-    if (
-      distPx(p.px, Apx) < BLOCK_B_NEAR_ENDPOINT_PX ||
-      distPx(p.px, Cpx) < BLOCK_B_NEAR_ENDPOINT_PX
-    ) {
-      return;
-    }
-
-    const cp = closestPointOnSegment(p.px, Apx, Cpx);
-    setBpos({ x: clamp01(cp.x / rect.width), y: clamp01(cp.y / rect.height) });
-    setBactive(true);
-    setDragging("B");
-  }
-
-  const Apx = rect ? pxFromNorm(A, rect) : { x: 0, y: 0 };
-  const Cpx = rect ? pxFromNorm(C, rect) : { x: 0, y: 0 };
-  const Bpx = rect ? pxFromNorm(Bpos, rect) : { x: 0, y: 0 };
-
-  const lineClickable = setupEnabled || allowPlayB;
-
-  // ✅ YOU smoothing (kept)
-  const [youSmooth, setYouSmooth] = useState(null);
-  const animRef = useRef({ raf: 0, from: null, to: null, t0: 0 });
-
-  useEffect(() => {
-    if (
-      !youNorm ||
-      typeof youNorm.x !== "number" ||
-      typeof youNorm.y !== "number"
-    ) {
-      if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
-      animRef.current = { raf: 0, from: null, to: null, t0: 0 };
-      setYouSmooth(null);
-      return;
-    }
-
-    const target = { x: clamp01(youNorm.x), y: clamp01(youNorm.y) };
-    const start = youSmooth ? { ...youSmooth } : target;
-
-    if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
-
-    animRef.current.from = start;
-    animRef.current.to = target;
-    animRef.current.t0 = performance.now();
-
-    const DURATION_MS = 350;
-
-    const step = (now) => {
-      const t = Math.max(
-        0,
-        Math.min(1, (now - animRef.current.t0) / DURATION_MS)
-      );
-      const e = 1 - Math.pow(1 - t, 3);
-
-      const x =
-        animRef.current.from.x +
-        (animRef.current.to.x - animRef.current.from.x) * e;
-      const y =
-        animRef.current.from.y +
-        (animRef.current.to.y - animRef.current.from.y) * e;
-
-      setYouSmooth({ x, y });
-
-      if (t < 1) {
-        animRef.current.raf = requestAnimationFrame(step);
-      } else {
-        animRef.current.raf = 0;
-      }
-    };
-
-    animRef.current.raf = requestAnimationFrame(step);
-
-    return () => {
-      if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
-      animRef.current.raf = 0;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [youNorm?.x, youNorm?.y]);
-
-  const ringPx = ringPxFromAccuracy(youAccuracyMeters);
-
-  return (
-    <div
-      ref={containerRef}
-      style={{
-        position: "relative",
-        width: "100%",
-        height: "100%",
-        touchAction: "none",
-        userSelect: "none",
-      }}
-      onPointerDown={onContainerPointerDown} // ✅ NEW: tap anywhere sets target
-      onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onPointerLeave={endDrag}
-    >
-      <img
-        src={imageSrc}
-        alt="Hole"
+    return(
+      <div
+        onPointerDown={onDown}
         style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-          display: "block",
-          pointerEvents: "none",
+          position:"absolute",
+          left:pos.x-10,
+          top:pos.y-10,
+          width:20,
+          height:20,
+          borderRadius:20,
+          background:color,
+          border:"3px solid black",
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          fontWeight:900,
+          color:"white",
+          fontSize:12,
+          zIndex:5,
+          cursor:"grab"
         }}
-        draggable={false}
+      >
+        {label}
+      </div>
+    );
+  }
+
+  function CartIcon({p}){
+
+    const pos=normToPx(p);
+
+    return(
+      <div
+        style={{
+          position:"absolute",
+          left:pos.x-16,
+          top:pos.y-12,
+          width:32,
+          height:24,
+          background:"rgba(0,120,255,.55)",
+          border:"3px solid white",
+          outline:"2px solid black",
+          borderRadius:4,
+          zIndex:7
+        }}
+      >
+        <div style={{
+          position:"absolute",
+          left:2,
+          top:2,
+          width:6,
+          height:6,
+          background:"black"
+        }}/>
+        <div style={{
+          position:"absolute",
+          right:2,
+          top:2,
+          width:6,
+          height:6,
+          background:"black"
+        }}/>
+        <div style={{
+          position:"absolute",
+          left:2,
+          bottom:2,
+          width:6,
+          height:6,
+          background:"black"
+        }}/>
+        <div style={{
+          position:"absolute",
+          right:2,
+          bottom:2,
+          width:6,
+          height:6,
+          background:"black"
+        }}/>
+
+        <div style={{
+          position:"absolute",
+          left:"50%",
+          top:"50%",
+          transform:"translate(-50%,-50%)",
+          width:4,
+          height:4,
+          borderRadius:4,
+          background:"white"
+        }}/>
+      </div>
+    );
+  }
+
+  return(
+
+    <div
+      style={{
+        position:"absolute",
+        left:0,
+        top:0,
+        right:0,
+        bottom:0
+      }}
+      onPointerDown={()=>{
+        onUserInteract?.();
+
+        if(viewMode==="drive" && rect){
+
+          const x=(event.clientX-rect.left)/rect.width;
+          const y=(event.clientY-rect.top)/rect.height;
+
+          setB({x,y});
+          setBactive(true);
+        }
+      }}
+    >
+
+      <img
+        ref={imgRef}
+        src={imageSrc}
+        style={{
+          width:"100%",
+          height:"100%",
+          objectFit:"contain",
+          position:"absolute"
+        }}
       />
 
-      {/* AIM MODE: lines + markers */}
-      {viewMode === "aim" && (
-        <>
-          <svg
-            width="100%"
-            height="100%"
-            style={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              pointerEvents: "none",
-            }}
-          >
-            {!Bactive ? (
-              <>
-                <line
-                  x1={Apx.x}
-                  y1={Apx.y}
-                  x2={Cpx.x}
-                  y2={Cpx.y}
-                  stroke="lime"
-                  strokeWidth="3"
-                />
-                <line
-                  x1={Apx.x}
-                  y1={Apx.y}
-                  x2={Cpx.x}
-                  y2={Cpx.y}
-                  stroke="rgba(0,0,0,0)"
-                  strokeWidth="26"
-                  style={{ pointerEvents: lineClickable ? "stroke" : "none" }}
-                  onPointerDown={onLinePointerDown}
-                />
-              </>
-            ) : (
-              <>
-                <line
-                  x1={Apx.x}
-                  y1={Apx.y}
-                  x2={Bpx.x}
-                  y2={Bpx.y}
-                  stroke="lime"
-                  strokeWidth="3"
-                />
-                <line
-                  x1={Bpx.x}
-                  y1={Bpx.y}
-                  x2={Cpx.x}
-                  y2={Cpx.y}
-                  stroke="lime"
-                  strokeWidth="3"
-                />
-              </>
-            )}
-          </svg>
-
-          {/* Accuracy ring (kept) */}
-          {youSmooth && (
-            <div
-              style={{
-                position: "absolute",
-                left: `${youSmooth.x * 100}%`,
-                top: `${youSmooth.y * 100}%`,
-                transform: "translate(-50%, -50%)",
-                zIndex: 4,
-                pointerEvents: "none",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  transform: "translate(-50%, -50%)",
-                  width: ringPx * 2,
-                  height: ringPx * 2,
-                  borderRadius: 999,
-                  border: "2px solid rgba(0,140,255,0.85)",
-                  background: "rgba(0,140,255,0.12)",
-                  boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
-                }}
-              />
-            </div>
-          )}
-
-          <Marker
-            kind="A"
-            norm={A}
-            onDown={(e) => onPointerDown("A", e)}
-            pointerEnabled={true}
-            cursor={"grab"}
-            hitSize={HIT_A}
+      {viewMode==="aim" && rect && (
+        <svg
+          width={rect.width}
+          height={rect.height}
+          style={{
+            position:"absolute",
+            left:0,
+            top:0,
+            pointerEvents:"none",
+            zIndex:2
+          }}
+        >
+          <line
+            x1={Apx.x}
+            y1={Apx.y}
+            x2={Cpx.x}
+            y2={Cpx.y}
+            stroke="lime"
+            strokeWidth="3"
           />
 
           {Bactive && (
-            <Marker
-              kind="B"
-              norm={Bpos}
-              onDown={(e) => onPointerDown("B", e)}
-              pointerEnabled={setupEnabled || allowPlayB}
-              cursor={setupEnabled || allowPlayB ? "grab" : "default"}
-              hitSize={HIT_B}
-            />
+            <>
+              <line
+                x1={Apx.x}
+                y1={Apx.y}
+                x2={Bpx.x}
+                y2={Bpx.y}
+                stroke="yellow"
+                strokeWidth="3"
+              />
+              <line
+                x1={Bpx.x}
+                y1={Bpx.y}
+                x2={Cpx.x}
+                y2={Cpx.y}
+                stroke="yellow"
+                strokeWidth="3"
+              />
+            </>
           )}
+        </svg>
+      )}
 
-          <Marker
-            kind="C"
-            norm={C}
-            onDown={(e) => onPointerDown("C", e)}
-            pointerEnabled={true}
-            cursor={"grab"}
-            hitSize={HIT_C}
+      {viewMode==="drive" && cart && rect && (
+        <svg
+          width={rect.width}
+          height={rect.height}
+          style={{
+            position:"absolute",
+            left:0,
+            top:0,
+            pointerEvents:"none",
+            zIndex:3
+          }}
+        >
+          <line
+            x1={cart.x}
+            y1={cart.y}
+            x2={Cpx.x}
+            y2={Cpx.y}
+            stroke="white"
+            strokeWidth="3"
           />
+
+          <circle
+            cx={Cpx.x}
+            cy={Cpx.y}
+            r="8"
+            fill="none"
+            stroke="white"
+            strokeWidth="3"
+          />
+        </svg>
+      )}
+
+      {setupEnabled && (
+        <>
+          <Marker p={A} label="A" color="green" onDown={(e)=>startDrag("A",e)}/>
+          <Marker p={C} label="C" color="red" onDown={(e)=>startDrag("C",e)}/>
         </>
       )}
 
-      {/* DRIVE MODE: cart icon only */}
-      {viewMode === "drive" && youSmooth && (
-        <CartIcon norm={youSmooth} />
+      {Bactive && viewMode==="aim" && (
+        <Marker p={B} label="B" color="orange" onDown={(e)=>startDrag("B",e)}/>
       )}
-    </div>
-  );
-}
 
-function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
-  const hs = typeof hitSize === "number" ? hitSize : 44;
+      {cart && <CartIcon p={youNorm}/>}
 
-  const visibleSize = kind === "A" ? 30 : kind === "B" ? 30 : 18;
-  const dotSize = kind === "C" ? 5 : 6;
-
-  const borderRadius = kind === "A" ? 6 : 999;
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: `${norm.x * 100}%`,
-        top: `${norm.y * 100}%`,
-        transform: "translate(-50%, -50%)",
-        width: hs,
-        height: hs,
-        borderRadius: "50%",
-        cursor,
-        pointerEvents: pointerEnabled ? "auto" : "none",
-        background: "transparent",
-        zIndex: 5,
-      }}
-      onPointerDown={pointerEnabled ? onDown : undefined}
-    >
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: visibleSize,
-          height: visibleSize,
-          borderRadius,
-          border: "2px solid white",
-          background: "transparent",
-          boxSizing: "border-box",
-          pointerEvents: "none",
-          opacity: 0.95,
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: dotSize,
-          height: dotSize,
-          borderRadius: 999,
-          background: "white",
-          pointerEvents: "none",
-          opacity: 0.95,
-        }}
-      />
-    </div>
-  );
-}
-
-// ✅ Simple cart: rectangle + 4 wheel ticks + center dot
-function CartIcon({ norm }) {
-  const W = 22;
-  const H = 31;
-
-  const wheel = 7;
-  const stroke = 2;
-
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: `${norm.x * 100}%`,
-        top: `${norm.y * 100}%`,
-        transform: "translate(-50%, -50%)",
-        zIndex: 10,
-        pointerEvents: "none",
-      }}
-    >
-      <svg
-        width={W + 22}
-        height={H + 22}
-        viewBox={`0 0 ${W + 22} ${H + 22}`}
-        style={{ overflow: "visible" }}
-      >
-        <rect
-          x={11}
-          y={11}
-          width={W}
-          height={H}
-          rx={3}
-          ry={3}
-          fill="rgba(0,120,255,0.50)"
-          stroke="white"
-          strokeWidth={stroke}
-        />
-
-        <line
-          x1={11}
-          y1={15}
-          x2={11 - wheel}
-          y2={15}
-          stroke="white"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-        <line
-          x1={11}
-          y1={11 + H - 4}
-          x2={11 - wheel}
-          y2={11 + H - 4}
-          stroke="white"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-
-        <line
-          x1={11 + W}
-          y1={15}
-          x2={11 + W + wheel}
-          y2={15}
-          stroke="white"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-        <line
-          x1={11 + W}
-          y1={11 + H - 4}
-          x2={11 + W + wheel}
-          y2={11 + H - 4}
-          stroke="white"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-        />
-
-        <circle
-          cx={11 + W / 2}
-          cy={11 + H / 2}
-          r={2.5}
-          fill="white"
-        />
-      </svg>
     </div>
   );
 }

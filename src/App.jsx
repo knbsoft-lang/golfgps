@@ -1206,27 +1206,27 @@ export default function App() {
             }}
           >
             {/* Arrow boxes ONLY when Target B exists */}
-            {Bactive && (
-              <>
-                <ArrowYardBox
-                  left={ARROW_LEFT}
-                  top={ARROW_TOP_BC}
-                  yards={targetToGreenYards}
-                />
-                <ArrowYardBox
-                  left={ARROW_LEFT}
-                  top={ARROW_TOP_AB}
-                  yards={teeToTargetYards}
-                />
-              </>
-            )}
+           {viewMode === "aim" && Bactive && (
+  <>
+    <ArrowYardBox
+      left={ARROW_LEFT}
+      top={ARROW_TOP_BC}
+      yards={targetToGreenYards}
+    />
+    <ArrowYardBox
+      left={ARROW_LEFT}
+      top={ARROW_TOP_AB}
+      yards={teeToTargetYards}
+    />
+  </>
+)}
 
             {/* Top-right white green box */}
             <div
               style={{
                 position: "fixed",
-                right: 10,
-                top: 120,
+                left: 10,
+                top: 20,
                 width: 118,
                 background: "white",
                 color: "black",
