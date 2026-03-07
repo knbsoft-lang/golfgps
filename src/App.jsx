@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-05";
+const TEST_SYNC_ID = "TEST-01";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -283,7 +283,6 @@ export default function App() {
       const s = JSON.parse(raw);
       if (!s || typeof s !== "object") return;
 
-      // Apply selection state first; hole index/page will be applied after roundHoles is built.
       setCourseType(s.courseType || "");
       setClubKey(s.clubKey || "");
       setMode(s.mode || "");
@@ -371,7 +370,6 @@ export default function App() {
     [courseType, clubKey, mode, nineA, nineB]
   );
 
-  // Apply pending restore (once we have roundHoles)
   useEffect(() => {
     const p = pendingRestoreRef.current;
     if (!p) return;
@@ -388,7 +386,6 @@ export default function App() {
     pendingRestoreRef.current = null;
   }, [roundHoles]);
 
-  // Save session as you use the app (debounced)
   const saveTimerRef = useRef(null);
   useEffect(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -746,7 +743,6 @@ export default function App() {
     return `${sign}${Math.abs(crossRawYardsSigned)} yd (${side})`;
   }, [crossRawYardsSigned]);
 
-  // Base point on overlay centerline + perpendicular direction (RIGHT)
   const basePointAndPerp = useMemo(() => {
     if (!teeLL || !greenLL || !pos || !A || !C) return null;
 
@@ -764,13 +760,11 @@ export default function App() {
     if (!isFinite(len) || len < 0.0001)
       return { base, perpRight: { x: 0, y: 0 }, t };
 
-    // Perp RIGHT in screen coords (x right, y down)
     const perpRight = { x: -dy / len, y: dx / len };
 
     return { base, perpRight, t };
   }, [teeLL, greenLL, pos, A, C]);
 
-  // YOU dot (centerline + optional offset)
   const youNormRaw = useMemo(() => {
     if (!teeLL || !greenLL || !pos || !A || !C) return null;
 
@@ -809,7 +803,6 @@ export default function App() {
     crossScaledYardsSigned,
   ]);
 
-  // ===== Trust + Freeze (Phase 4B) =====
   const trustLevel = useMemo(() => {
     const a = pos?.accuracyMeters;
     if (a == null || !isFinite(a)) return "—";
@@ -829,7 +822,6 @@ export default function App() {
 
   const youNorm = trustIsLow ? lastGoodYouRef.current : youNormRaw;
 
-  // ===== Progress down hole (for tee departure) =====
   const alongFromTeeYards = useMemo(() => {
     const t = basePointAndPerp?.t;
     if (typeof t !== "number") return null;
@@ -867,7 +859,6 @@ export default function App() {
 
     const { base, perpRight } = basePointAndPerp;
 
-    // Signed normalized offset of B from base along perpRight
     const vx = B.x - base.x;
     const vy = B.y - base.y;
     const offsetNormSigned = vx * perpRight.x + vy * perpRight.y;
@@ -898,7 +889,6 @@ export default function App() {
   const ARROW_LEFT = 80;
   const ARROW_TOP_BC = 240;
   const ARROW_TOP_AB = 640;
-  const ARROW_TOP_AC = 260;
 
   const holeNumberText =
     hole?.displayHole != null
@@ -949,7 +939,6 @@ export default function App() {
     overlayActionsRef.current?.clearTarget?.();
   }
 
-  // CLOSE behavior: next open should start fresh
   function handleCloseAndFreshNextOpen() {
     const ok = window.confirm(
       "CLOSE?\n\nNext time you open the app it will start fresh (Home screen).\n\nPress OK to enable fresh start."
@@ -961,7 +950,6 @@ export default function App() {
       localStorage.removeItem(SESSION_KEY);
     } catch {}
 
-    // Immediately return to a clean Home screen now too
     setSetupEnabled(false);
     setPage("home");
     setCourseType("");
@@ -983,15 +971,13 @@ export default function App() {
       ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000))
       : null;
 
-   // ===== Phase 4: DRIVE vs AIM mode (no buttons) =====
-  // DRIVE: only cart icon
-  // AIM: show A/B/C + lines
+  // ===== Phase 4: DRIVE vs AIM mode (no buttons) =====
   const [viewMode, setViewMode] = useState("aim"); // "aim" | "drive"
   const [teeDepartureReached, setTeeDepartureReached] = useState(false);
   const lastInteractMsRef = useRef(Date.now());
   const idleTimerRef = useRef(null);
 
-     function markUserInteraction() {
+  function markUserInteraction() {
     lastInteractMsRef.current = Date.now();
     setViewMode("aim");
 
@@ -1000,7 +986,6 @@ export default function App() {
       idleTimerRef.current = null;
     }
 
-    // Do NOT start the 15-second timer until tee departure is reached
     if (!teeDepartureReached) return;
 
     idleTimerRef.current = setTimeout(() => {
@@ -1008,7 +993,6 @@ export default function App() {
     }, 15000);
   }
 
-      // Reset to AIM when hole changes or when you enter Play
   useEffect(() => {
     if (page !== "play") return;
 
@@ -1028,9 +1012,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, holeKey]);
 
-    // Tee departure logic:
-  // Before 100 yd: always stay in AIM mode, no timeout.
-  // After 100 yd: enable normal 15-second inactivity behavior.
   useEffect(() => {
     if (page !== "play") return;
     if (teeDepartureReached) return;
@@ -1049,6 +1030,13 @@ export default function App() {
       setViewMode("drive");
     }, 15000);
   }, [page, alongFromTeeYards, trustIsLow, teeDepartureReached]);
+
+  // Temporary green box values until real front/center/back depths are added
+  const greenCenterYards = youToGreenYards;
+  const greenBackYards =
+    typeof youToGreenYards === "number" ? youToGreenYards + 15 : null;
+  const greenFrontYards =
+    typeof youToGreenYards === "number" ? Math.max(0, youToGreenYards - 13) : null;
 
   return (
     <div
@@ -1217,45 +1205,61 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {/* Arrow boxes */}
-{viewMode === "aim" && (
-  <>
-    {!Bactive && (
-      <ArrowYardBox
-        left={ARROW_LEFT}
-        top={ARROW_TOP_AC}
-        yards={
-          typeof modeledTotalYards === "number"
-            ? modeledTotalYards
-            : teeToGreenYards
-        }
-      />
-    )}
-    {Bactive && (
-      <ArrowYardBox
-        left={ARROW_LEFT}
-        top={ARROW_TOP_BC}
-        yards={targetToGreenYards}
-      />
-    )}
-    {Bactive && (
-      <ArrowYardBox
-        left={ARROW_LEFT}
-        top={ARROW_TOP_AB}
-        yards={teeToTargetYards}
-      />
-    )}
-  </>
-)}
+            {/* Arrow boxes ONLY when Target B exists */}
+            {Bactive && (
+              <>
+                <ArrowYardBox
+                  left={ARROW_LEFT}
+                  top={ARROW_TOP_BC}
+                  yards={targetToGreenYards}
+                />
+                <ArrowYardBox
+                  left={ARROW_LEFT}
+                  top={ARROW_TOP_AB}
+                  yards={teeToTargetYards}
+                />
+              </>
+            )}
 
-{/* ✅ DRIVE MODE: always show You→Green arrow box while cart icon is shown */}
-{viewMode === "drive" && (
-  <ArrowYardBox
-    left={ARROW_LEFT}
-    top={ARROW_TOP_AC}
-    yards={typeof youToGreenYards === "number" ? youToGreenYards : null}
-  />
-)}
+            {/* Top-right white green box */}
+            <div
+              style={{
+                position: "fixed",
+                right: 10,
+                top: 120,
+                width: 118,
+                background: "white",
+                color: "black",
+                border: "2px solid black",
+                borderRadius: 0,
+                padding: "6px 6px 8px 6px",
+                textAlign: "center",
+                zIndex: 10000,
+                fontWeight: 900,
+                boxShadow: "0 6px 14px rgba(0,0,0,0.35)",
+                lineHeight: 1.0,
+              }}
+            >
+              <div style={{ fontSize: 16, marginBottom: 0 }}>Back</div>
+              <div style={{ fontSize: 18, marginBottom: 6 }}>
+                {greenBackYards ?? "—"}
+              </div>
+
+              <div style={{ fontSize: 16, marginBottom: 0 }}>Center</div>
+              <div
+                style={{
+                  fontSize: 42,
+                  fontWeight: 950,
+                  marginBottom: 6,
+                  lineHeight: 0.95,
+                }}
+              >
+                {greenCenterYards ?? "—"}
+              </div>
+
+              <div style={{ fontSize: 16, marginBottom: 0 }}>Front</div>
+              <div style={{ fontSize: 18 }}>{greenFrontYards ?? "—"}</div>
+            </div>
 
             {/* Overlay + YOU cart */}
             {imgSrc ? (
@@ -1267,8 +1271,8 @@ export default function App() {
                 allowPlayB={true}
                 youNorm={youNorm}
                 youAccuracyMeters={pos?.accuracyMeters ?? null}
-                viewMode={viewMode}                 // ✅ NEW
-                onUserInteract={markUserInteraction} // ✅ NEW (tap/drag resets 12s timer + AIM)
+                viewMode={viewMode}
+                onUserInteract={markUserInteraction}
                 onStateChange={(state) => setLiveOverlay(state)}
                 onActionsReady={(actions) => {
                   overlayActionsRef.current = actions;
@@ -1449,27 +1453,7 @@ export default function App() {
               </div>
             )}
 
-            {/* HOME + SETUP + CLOSE */}
-            <button
-              onClick={goHome}
-              style={{
-                position: "fixed",
-                left: 10,
-                top: TOP_BTN_TOP,
-                width: TOP_BTN_W,
-                height: TOP_BTN_H,
-                borderRadius: 12,
-                border: "1px solid #333",
-                background: "white",
-                color: "black",
-                fontWeight: 900,
-                fontSize: 18 * 1.15,
-                zIndex: 10000,
-              }}
-            >
-              HOME
-            </button>
-
+            {/* SETUP / CLOSE / HOME stack */}
             <button
               onClick={setupEnabled ? undefined : enterSetup}
               style={{
@@ -1491,7 +1475,6 @@ export default function App() {
               SETUP
             </button>
 
-            {/* ✅ CLOSE button under SETUP */}
             <button
               onClick={handleCloseAndFreshNextOpen}
               style={{
@@ -1511,6 +1494,26 @@ export default function App() {
               title="Press this if you want the app to start fresh next time you open it"
             >
               CLOSE
+            </button>
+
+            <button
+              onClick={goHome}
+              style={{
+                position: "fixed",
+                right: 10,
+                top: TOP_BTN_TOP + TOP_BTN_H + 8 + 46,
+                width: TOP_BTN_W,
+                height: 38,
+                borderRadius: 12,
+                border: "1px solid #333",
+                background: "white",
+                color: "black",
+                fontWeight: 900,
+                fontSize: 16,
+                zIndex: 10000,
+              }}
+            >
+              HOME
             </button>
 
             {/* SETUP CONTROLS */}
