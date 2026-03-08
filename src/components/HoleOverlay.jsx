@@ -68,8 +68,8 @@ export default function HoleOverlay({
   youNorm = null,
   youAccuracyMeters = null,
 
-  viewMode = "aim",        // ✅ added
-  onUserInteract = null,   // ✅ added
+  viewMode = "aim",
+  onUserInteract = null,
 
   onStateChange,
   onActionsReady,
@@ -230,7 +230,7 @@ export default function HoleOverlay({
     }
   }
 
-  // ✅ single tap anywhere sets B
+  // single tap anywhere sets B
   function onContainerPointerDown(e) {
     if (!setupEnabled && !allowPlayB) return;
 
@@ -277,7 +277,7 @@ export default function HoleOverlay({
 
   const lineClickable = setupEnabled || allowPlayB;
 
-  // ✅ smooth cart movement
+  // smooth cart movement
   const [youSmooth, setYouSmooth] = useState(null);
   const animRef = useRef({ raf: 0, from: null, to: null, t0: 0 });
 

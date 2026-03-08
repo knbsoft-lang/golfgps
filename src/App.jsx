@@ -7,7 +7,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-02";
+const TEST_SYNC_ID = "TEST-07";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -62,11 +62,7 @@ function buildRound(club, mode, nineA, nineB) {
   const back = nineBList.map((h) => ({
     displayHole: h.hole + 9,
     nine: nineB,
-    hole: h.hole,
-    tee: h.tee,
-    green: h.green,
-    par: h.par,
-    hcp: h.hcp,
+    ...h,
   }));
 
   return [...front, ...back];
@@ -1031,12 +1027,18 @@ export default function App() {
     }, 15000);
   }, [page, alongFromTeeYards, trustIsLow, teeDepartureReached]);
 
-  // Temporary green box values until real front/center/back depths are added
+  // Green depth from hole data
+  const greenDepth = typeof hole?.greenDepth === "number" ? hole.greenDepth : null;
+
   const greenCenterYards = youToGreenYards;
   const greenBackYards =
-    typeof youToGreenYards === "number" ? youToGreenYards + 15 : null;
+    typeof youToGreenYards === "number" && typeof greenDepth === "number"
+      ? roundYards(youToGreenYards + greenDepth / 2)
+      : null;
   const greenFrontYards =
-    typeof youToGreenYards === "number" ? Math.max(0, youToGreenYards - 13) : null;
+    typeof youToGreenYards === "number" && typeof greenDepth === "number"
+      ? roundYards(Math.max(0, youToGreenYards - greenDepth / 2))
+      : null;
 
   return (
     <div
@@ -1206,22 +1208,22 @@ export default function App() {
             }}
           >
             {/* Arrow boxes ONLY when Target B exists */}
-           {viewMode === "aim" && Bactive && (
-  <>
-    <ArrowYardBox
-      left={ARROW_LEFT}
-      top={ARROW_TOP_BC}
-      yards={targetToGreenYards}
-    />
-    <ArrowYardBox
-      left={ARROW_LEFT}
-      top={ARROW_TOP_AB}
-      yards={teeToTargetYards}
-    />
-  </>
-)}
+            {viewMode === "aim" && Bactive && (
+              <>
+                <ArrowYardBox
+                  left={ARROW_LEFT}
+                  top={ARROW_TOP_BC}
+                  yards={targetToGreenYards}
+                />
+                <ArrowYardBox
+                  left={ARROW_LEFT}
+                  top={ARROW_TOP_AB}
+                  yards={teeToTargetYards}
+                />
+              </>
+            )}
 
-            {/* Top-right white green box */}
+            {/* Top-left white green box */}
             <div
               style={{
                 position: "fixed",

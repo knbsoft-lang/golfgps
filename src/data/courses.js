@@ -13,6 +13,7 @@
  * Optional per-hole fields:
  * - par: number
  * - hcp: number  (handicap / stroke index)
+ * - greenDepth: number  (green depth in yards)
  */
 
 export const BELLE_GLADES = {
@@ -93,28 +94,28 @@ export const ORANGE_BLOSSOM = {
   courseType: "Championship",
   nines: {
     Front: [
-      { hole: 1, par: 5, hcp: 3, tee: { lat: 28.952719, lon: -81.946772 }, green: { lat: 28.955403, lon: -81.948703 } },
-      { hole: 2, par: 4, hcp: 1, tee: { lat: 28.955931, lon: -81.949208 }, green: { lat: 28.957261, lon: -81.946931 } },
-      { hole: 3, par: 3, hcp: 13, tee: { lat: 28.958025, lon: -81.946539 }, green: { lat: 28.958936, lon: -81.946011 } },
-      { hole: 4, par: 4, hcp: 15, tee: { lat: 28.959161, lon: -81.947281 }, green: { lat: 28.957411, lon: -81.948656 } },
-      { hole: 5, par: 4, hcp: 5, tee: { lat: 28.957378, lon: -81.949864 }, green: { lat: 28.957058, lon: -81.952844 } },
-      { hole: 6, par: 5, hcp: 7, tee: { lat: 28.956519, lon: -81.953064 }, green: { lat: 28.953361, lon: -81.953167 } },
-      { hole: 7, par: 4, hcp: 9, tee: { lat: 28.953208, lon: -81.952136 }, green: { lat: 28.954342, lon: -81.94985 } },
-      { hole: 8, par: 3, hcp: 17, tee: { lat: 28.954283, lon: -81.949406 }, green: { lat: 28.953336, lon: -81.949294 } },
-      { hole: 9, par: 4, hcp: 11, tee: { lat: 28.953067, lon: -81.949528 }, green: { lat: 28.951653, lon: -81.947711 } },
+      { hole: 1, par: 5, hcp: 3, greenDepth: 26, tee: { lat: 28.952719, lon: -81.946772 }, green: { lat: 28.955403, lon: -81.948703 } },
+      { hole: 2, par: 4, hcp: 1, greenDepth: 26, tee: { lat: 28.955931, lon: -81.949208 }, green: { lat: 28.957261, lon: -81.946931 } },
+      { hole: 3, par: 3, hcp: 13, greenDepth: 37, tee: { lat: 28.958025, lon: -81.946539 }, green: { lat: 28.958936, lon: -81.946011 } },
+      { hole: 4, par: 4, hcp: 15, greenDepth: 24, tee: { lat: 28.959161, lon: -81.947281 }, green: { lat: 28.957411, lon: -81.948656 } },
+      { hole: 5, par: 4, hcp: 5, greenDepth: 28, tee: { lat: 28.957378, lon: -81.949864 }, green: { lat: 28.957058, lon: -81.952844 } },
+      { hole: 6, par: 5, hcp: 7, greenDepth: 33, tee: { lat: 28.956519, lon: -81.953064 }, green: { lat: 28.953361, lon: -81.953167 } },
+      { hole: 7, par: 4, hcp: 9, greenDepth: 33, tee: { lat: 28.953208, lon: -81.952136 }, green: { lat: 28.954342, lon: -81.94985 } },
+      { hole: 8, par: 3, hcp: 17, greenDepth: 25, tee: { lat: 28.954283, lon: -81.949406 }, green: { lat: 28.953336, lon: -81.949294 } },
+      { hole: 9, par: 4, hcp: 11, greenDepth: 39, tee: { lat: 28.953067, lon: -81.949528 }, green: { lat: 28.951653, lon: -81.947711 } },
     ],
 
     // Back nine stored as holes 1..9 so it matches /Back/hole01.png..hole09.png
     Back: [
-      { hole: 1, par: 4, hcp: 10, tee: { lat: 28.951861, lon: -81.945603 }, green: { lat: 28.954964, lon: -81.945625 } },
-      { hole: 2, par: 4, hcp: 8, tee: { lat: 28.955306, lon: -81.944869 }, green: { lat: 28.956886, lon: -81.943139 } },
-      { hole: 3, par: 5, hcp: 2, tee: { lat: 28.957122, lon: -81.942753 }, green: { lat: 28.957792, lon: -81.939036 } },
-      { hole: 4, par: 4, hcp: 14, tee: { lat: 28.957467, lon: -81.938703 }, green: { lat: 28.955942, lon: -81.937036 } },
-      { hole: 5, par: 3, hcp: 16, tee: { lat: 28.955214, lon: -81.936564 }, green: { lat: 28.954106, lon: -81.936942 } },
-      { hole: 6, par: 4, hcp: 12, tee: { lat: 28.953406, lon: -81.937356 }, green: { lat: 28.950681, lon: -81.938119 } },
-      { hole: 7, par: 5, hcp: 4, tee: { lat: 28.950478, lon: -81.938747 }, green: { lat: 28.949947, lon: -81.9428 } },
-      { hole: 8, par: 3, hcp: 18, tee: { lat: 28.950511, lon: -81.942583 }, green: { lat: 28.951606, lon: -81.942597 } },
-      { hole: 9, par: 4, hcp: 6, tee: { lat: 28.951953, lon: -81.94285 }, green: { lat: 28.950258, lon: -81.9455 } },
+      { hole: 1, par: 4, hcp: 10, greenDepth: 30, tee: { lat: 28.951861, lon: -81.945603 }, green: { lat: 28.954964, lon: -81.945625 } },
+      { hole: 2, par: 4, hcp: 8, greenDepth: 33, tee: { lat: 28.955306, lon: -81.944869 }, green: { lat: 28.956886, lon: -81.943139 } },
+      { hole: 3, par: 5, hcp: 2, greenDepth: 33, tee: { lat: 28.957122, lon: -81.942753 }, green: { lat: 28.957792, lon: -81.939036 } },
+      { hole: 4, par: 4, hcp: 14, greenDepth: 30, tee: { lat: 28.957467, lon: -81.938703 }, green: { lat: 28.955942, lon: -81.937036 } },
+      { hole: 5, par: 3, hcp: 16, greenDepth: 24, tee: { lat: 28.955214, lon: -81.936564 }, green: { lat: 28.954106, lon: -81.936942 } },
+      { hole: 6, par: 4, hcp: 12, greenDepth: 29, tee: { lat: 28.953406, lon: -81.937356 }, green: { lat: 28.950681, lon: -81.938119 } },
+      { hole: 7, par: 5, hcp: 4, greenDepth: 35, tee: { lat: 28.950478, lon: -81.938747 }, green: { lat: 28.949947, lon: -81.9428 } },
+      { hole: 8, par: 3, hcp: 18, greenDepth: 24, tee: { lat: 28.950511, lon: -81.942583 }, green: { lat: 28.951606, lon: -81.942597 } },
+      { hole: 9, par: 4, hcp: 6, greenDepth: 32, tee: { lat: 28.951953, lon: -81.94285 }, green: { lat: 28.950258, lon: -81.9455 } },
     ],
   },
 };
