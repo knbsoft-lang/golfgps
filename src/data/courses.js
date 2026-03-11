@@ -237,6 +237,6 @@ export const COURSE_CATALOG = {
   "Orange Blossom": ORANGE_BLOSSOM,
   "Broad Stripes Golf": BROAD_STRIPES,
   "Hacienda Hills": HACIENDA_HILLS,
-  Glenview: GLENVIEW_CHAMPIONS,
+  "Glenview Champions": GLENVIEW_CHAMPIONS,
   "Tierra Del Sol": TIERRA_DEL_SOL,
 };
