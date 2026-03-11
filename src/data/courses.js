@@ -160,7 +160,7 @@ export const HACIENDA_HILLS = {
   },
 };
 
-export const GLENVIEW = {
+export const GLENVIEW_CHAMPIONS = {
   clubName: "Glenview Country Club",
   courseType: "Championship",
   nines: {
@@ -237,6 +237,6 @@ export const COURSE_CATALOG = {
   "Orange Blossom": ORANGE_BLOSSOM,
   "Broad Stripes Golf": BROAD_STRIPES,
   "Hacienda Hills": HACIENDA_HILLS,
-  Glenview: GLENVIEW,
+  Glenview: GLENVIEW_CHAMPIONS,
   "Tierra Del Sol": TIERRA_DEL_SOL,
 };
