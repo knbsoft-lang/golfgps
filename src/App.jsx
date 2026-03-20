@@ -1,4 +1,3 @@
-// src/App.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { COURSE_CATALOG } from "./data/courses";
 import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
@@ -501,68 +500,6 @@ export default function App() {
   const teeLL = tgOverride?.tee ?? hole?.tee ?? null;
   const greenLL = tgOverride?.green ?? hole?.green ?? null;
 
-  function handleUpdateTeeFromGPS() {
-    if (!hole || !clubKey || !teeBox) return;
-    if (!pos?.lat || !pos?.lon) return;
-
-    if (
-      !window.confirm(
-        "Update Tee?\n\nThis will save your CURRENT GPS position as the tee for this hole + tee box."
-      )
-    ) {
-      return;
-    }
-
-    if (pos?.accuracyMeters != null && pos.accuracyMeters > 25) {
-      window.alert(
-        `GPS accuracy is LOW (${Math.round(
-          pos.accuracyMeters
-        )}m).\nWait for better accuracy, then try again.`
-      );
-      return;
-    }
-
-    saveTGOverride(clubKey, hole.nine, hole.hole, teeBox, {
-      tee: { lat: pos.lat, lon: pos.lon },
-    });
-    setTgRev((n) => n + 1);
-
-    window.alert(
-      `Saved TEE override\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\nLat ${pos.lat}\nLon ${pos.lon}`
-    );
-  }
-
-  function handleUpdateGreenFromGPS() {
-    if (!hole || !clubKey || !teeBox) return;
-    if (!pos?.lat || !pos?.lon) return;
-
-    if (
-      !window.confirm(
-        "Update Green?\n\nThis will save your CURRENT GPS position as the green for this hole + tee box."
-      )
-    ) {
-      return;
-    }
-
-    if (pos?.accuracyMeters != null && pos.accuracyMeters > 25) {
-      window.alert(
-        `GPS accuracy is LOW (${Math.round(
-          pos.accuracyMeters
-        )}m).\nWait for better accuracy, then try again.`
-      );
-      return;
-    }
-
-    saveTGOverride(clubKey, hole.nine, hole.hole, teeBox, {
-      green: { lat: pos.lat, lon: pos.lon },
-    });
-    setTgRev((n) => n + 1);
-
-    window.alert(
-      `Saved GREEN override\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\nLat ${pos.lat}\nLon ${pos.lon}`
-    );
-  }
-
   const teeToGreenYards = useMemo(() => {
     if (!teeLL || !greenLL) return null;
     return roundYards(metersToYards(haversineMeters(teeLL, greenLL)));
@@ -933,6 +870,22 @@ export default function App() {
 
   function handleClearTarget() {
     overlayActionsRef.current?.clearTarget?.();
+  }
+
+  function handleClearDefaults() {
+    const ok = window.confirm(
+      "Clear saved defaults for this hole?\n\nThis will remove saved A / C / B positions for the current hole and snap back to the built-in defaults."
+    );
+    if (!ok) return;
+
+    overlayActionsRef.current?.clearDefaultsNow?.();
+
+    const st = overlayActionsRef.current?.getState?.();
+    if (st?.A && st?.C) {
+      setBaselineAC({ A: st.A, C: st.C });
+    } else {
+      setBaselineAC(null);
+    }
   }
 
   function handleCloseAndFreshNextOpen() {
@@ -1414,38 +1367,6 @@ export default function App() {
                   >
                     Reset Cal
                   </button>
-
-                  <button
-                    onClick={handleUpdateTeeFromGPS}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "white",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                    title="Stand on tee (good accuracy), then save tee coordinates"
-                  >
-                    Update Tee
-                  </button>
-
-                  <button
-                    onClick={handleUpdateGreenFromGPS}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "white",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                    title="Stand near green center (good accuracy), then save green coordinates"
-                  >
-                    Update Green
-                  </button>
                 </div>
 
                 <div style={{ marginTop: 10, opacity: 0.85 }}>
@@ -1562,6 +1483,21 @@ export default function App() {
                   }}
                 >
                   Save Defaults
+                </button>
+
+                <button
+                  onClick={handleClearDefaults}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "white",
+                    fontWeight: 900,
+                    fontSize: 13,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  Clear Defaults
                 </button>
 
                 <button

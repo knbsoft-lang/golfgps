@@ -44,6 +44,14 @@ export function setHoleDefaults(holeKey, data) {
   writeAll(all);
 }
 
+export function clearHoleDefaults(holeKey) {
+  const all = readAll();
+  if (holeKey && Object.prototype.hasOwnProperty.call(all, holeKey)) {
+    delete all[holeKey];
+    writeAll(all);
+  }
+}
+
 /** Export ALL defaults (every hole) as a JSON string you can copy/paste */
 export function exportAllDefaults() {
   const all = readAll();

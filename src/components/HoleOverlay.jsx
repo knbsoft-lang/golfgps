@@ -1,6 +1,11 @@
 // src/components/HoleOverlay.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { clamp01, getHoleDefaults, setHoleDefaults } from "../data/holeDefaults";
+import {
+  clamp01,
+  getHoleDefaults,
+  setHoleDefaults,
+  clearHoleDefaults,
+} from "../data/holeDefaults";
 
 const DEFAULT_A = { x: 0.5, y: 0.75 };
 const DEFAULT_C = { x: 0.5, y: 0.25 };
@@ -95,8 +100,8 @@ export default function HoleOverlay({
     return () => ro.disconnect();
   }, []);
 
-  const fallbackA = useMemo(() => normPoint(initialA, DEFAULT_A), []);
-  const fallbackC = useMemo(() => normPoint(initialC, DEFAULT_C), []);
+  const fallbackA = useMemo(() => normPoint(initialA, DEFAULT_A), [initialA]);
+  const fallbackC = useMemo(() => normPoint(initialC, DEFAULT_C), [initialC]);
 
   const [A, setA] = useState(fallbackA);
   const [C, setC] = useState(fallbackC);
@@ -145,15 +150,36 @@ export default function HoleOverlay({
     setHoleDefaults(holeKey, { A, C, B: Bpos, Bactive });
   }
 
+  function clearDefaultsNow() {
+    if (!holeKey) return;
+
+    clearHoleDefaults(holeKey);
+
+    const resetA = fallbackA;
+    const resetC = fallbackC;
+    const resetB = {
+      x: clamp01((resetA.x + resetC.x) / 2),
+      y: clamp01((resetA.y + resetC.y) / 2),
+    };
+
+    setA(resetA);
+    setC(resetC);
+    setBpos(resetB);
+    setBactive(false);
+    setDragging(null);
+    lastBTapMsRef.current = 0;
+  }
+
   useEffect(() => {
     if (!onActionsReady) return;
     onActionsReady({
       saveDefaults,
       clearTarget,
+      clearDefaultsNow,
       getState,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onActionsReady, holeKey, A, C, Bpos, Bactive]);
+  }, [onActionsReady, holeKey, A, C, Bpos, Bactive, fallbackA, fallbackC]);
 
   useEffect(() => {
     if (!onStateChange) return;
