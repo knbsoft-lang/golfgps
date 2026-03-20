@@ -130,7 +130,7 @@ export const HACIENDA_HILLS = {
       { hole: 5, par: 4, hcp: 1, greenDepth: 37, tee: { lat: 28.939578, lon: -81.954312 }, green: { lat: 28.936937, lon: -81.954261 } },
       { hole: 6, par: 4, hcp: 3, greenDepth: 32, tee: { lat: 28.936426, lon: -81.954667 }, green: { lat: 28.936596, lon: -81.957717 } },
       { hole: 7, par: 4, hcp: 4, greenDepth: 25, tee: { lat: 28.936828, lon: -81.959121 }, green: { lat: 28.936549, lon: -81.961768 } },
-      { hole: 8, par: 3, hcp: 6, greenDepth: 24, tee: { lat: 28.93686, lon: -81.959068 }, green: { lat: 28.937393, lon: -81.962768 } },
+      { hole: 8, par: 3, hcp: 6, greenDepth: 24, tee: { lat: 28.937138, lon: -81.96157 }, green: { lat: 28.937409, lon: -81.96274 } },
       { hole: 9, par: 5, hcp: 8, greenDepth: 26, tee: { lat: 28.939483, lon: -81.963088 }, green: { lat: 28.942708, lon: -81.963187 } },
     ],
 
@@ -232,6 +232,90 @@ export const TIERRA_DEL_SOL = {
   },
 };
 
+export const LOPEZ_LEGACY = {
+  clubName: "Lopez Legacy Golf & Country Club",
+  courseType: "Championship",
+  nines: {
+    AshleyMeadows: [
+      { hole: 1, par: 4, hcp: 8, greenDepth: 33, tee: { lat: 28.973916, lon: -82.013823 }, green: { lat: 28.976034, lon: -82.012771 } },
+      { hole: 2, par: 4, hcp: 4, greenDepth: 25, tee: { lat: 28.976922, lon: -82.01212 }, green: { lat: 28.975002, lon: -82.009942 } },
+      { hole: 3, par: 5, hcp: 1, greenDepth: 34, tee: { lat: 28.975195, lon: -82.008152 }, green: { lat: 28.975692, lon: -82.004011 } },
+      { hole: 4, par: 3, hcp: 9, greenDepth: 31, tee: { lat: 28.976468, lon: -82.003073 }, green: { lat: 28.977491, lon: -82.003255 } },
+      { hole: 5, par: 4, hcp: 7, greenDepth: 31, tee: { lat: 28.978031, lon: -82.003796 }, green: { lat: 28.978666, lon: -82.006905 } },
+      { hole: 6, par: 4, hcp: 2, greenDepth: 36, tee: { lat: 28.978436, lon: -82.008693 }, green: { lat: 28.978799, lon: -82.011294 } },
+      { hole: 7, par: 4, hcp: 5, greenDepth: 26, tee: { lat: 28.978449, lon: -82.012883 }, green: { lat: 28.979895, lon: -82.01522 } },
+      { hole: 8, par: 3, hcp: 6, greenDepth: 25, tee: { lat: 28.978811, lon: -82.016331 }, green: { lat: 28.977957, lon: -82.016953 } },
+      { hole: 9, par: 5, hcp: 3, greenDepth: 26, tee: { lat: 28.976531, lon: -82.01696 }, green: { lat: 28.973549, lon: -82.014303 } },
+    ],
+
+    ErinnGlenn: [
+      { hole: 1, par: 4, hcp: 5, greenDepth: 28, tee: { lat: 28.969705, lon: -82.012906 }, green: { lat: 28.967717, lon: -82.011628 } },
+      { hole: 2, par: 3, hcp: 8, greenDepth: 36, tee: { lat: 28.9659, lon: -82.013048 }, green: { lat: 28.965707, lon: -82.011765 } },
+      { hole: 3, par: 4, hcp: 6, greenDepth: 39, tee: { lat: 28.965598, lon: -82.010804 }, green: { lat: 28.968329, lon: -82.011061 } },
+      { hole: 4, par: 5, hcp: 1, greenDepth: 34, tee: { lat: 28.968756, lon: -82.00949 }, green: { lat: 28.968475, lon: -82.00521 } },
+      { hole: 5, par: 4, hcp: 3, greenDepth: 40, tee: { lat: 28.967259, lon: -82.005109 }, green: { lat: 28.965915, lon: -82.002819 } },
+      { hole: 6, par: 3, hcp: 7, greenDepth: 32, tee: { lat: 28.964791, lon: -82.002436 }, green: { lat: 28.965769, lon: -82.001606 } },
+      { hole: 7, par: 4, hcp: 2, greenDepth: 23, tee: { lat: 28.967005, lon: -82.00234 }, green: { lat: 28.968418, lon: -82.004486 } },
+      { hole: 8, par: 5, hcp: 9, greenDepth: 37, tee: { lat: 28.969683, lon: -82.005757 }, green: { lat: 28.969488, lon: -82.010151 } },
+      { hole: 9, par: 4, hcp: 4, greenDepth: 34, tee: { lat: 28.969117, lon: -82.01082 }, green: { lat: 28.971395, lon: -82.012048 } },
+    ],
+
+    TorriPines: [
+      { hole: 1, par: 5, hcp: 2, greenDepth: 32, tee: { lat: 28.970798, lon: -82.016297 }, green: { lat: 28.971276, lon: -82.02028 } },
+      { hole: 2, par: 3, hcp: 8, greenDepth: 42, tee: { lat: 28.972175, lon: -82.021348 }, green: { lat: 28.973103, lon: -82.021411 } },
+      { hole: 3, par: 4, hcp: 7, greenDepth: 36, tee: { lat: 28.974753, lon: -82.021346 }, green: { lat: 28.976598, lon: -82.022414 } },
+      { hole: 4, par: 4, hcp: 6, greenDepth: 38, tee: { lat: 28.978797, lon: -82.021349 }, green: { lat: 28.981439, lon: -82.021432 } },
+      { hole: 5, par: 4, hcp: 1, greenDepth: 37, tee: { lat: 28.981732, lon: -82.020178 }, green: { lat: 28.980437, lon: -82.017816 } },
+      { hole: 6, par: 4, hcp: 4, greenDepth: 40, tee: { lat: 28.980032, lon: -82.017279 }, green: { lat: 28.978647, lon: -82.019595 } },
+      { hole: 7, par: 4, hcp: 3, greenDepth: 35, tee: { lat: 28.97773, lon: -82.020982 }, green: { lat: 28.975037, lon: -82.020903 } },
+      { hole: 8, par: 3, hcp: 9, greenDepth: 25, tee: { lat: 28.973168, lon: -82.020396 }, green: { lat: 28.972351, lon: -82.020276 } },
+      { hole: 9, par: 5, hcp: 5, greenDepth: 33, tee: { lat: 28.971974, lon: -82.020068 }, green: { lat: 28.97232, lon: -82.015631 } },
+    ],
+  },
+};
+
+export const PALMER_LEGENDS = {
+  clubName: "Palmer Legends Country Club",
+  courseType: "Championship",
+  nines: {
+    CherryHill: [
+      { hole: 1, par: 5, hcp: 4, greenDepth: 36, tee: { lat: 28.91073, lon: -81.994388 }, green: { lat: 28.913724, lon: -81.997252 } },
+      { hole: 2, par: 4, hcp: 2, greenDepth: 37, tee: { lat: 28.913252, lon: -81.999551 }, green: { lat: 28.912943, lon: -82.002888 } },
+      { hole: 3, par: 4, hcp: 5, greenDepth: 36, tee: { lat: 28.913313, lon: -82.003668 }, green: { lat: 28.916094, lon: -82.003446 } },
+      { hole: 4, par: 4, hcp: 1, greenDepth: 33, tee: { lat: 28.919611, lon: -82.005384 }, green: { lat: 28.919501, lon: -82.008325 } },
+      { hole: 5, par: 3, hcp: 7, greenDepth: 31, tee: { lat: 28.919678, lon: -82.009969 }, green: { lat: 28.918738, lon: -82.010008 } },
+      { hole: 6, par: 4, hcp: 6, greenDepth: 41, tee: { lat: 28.919612, lon: -82.005348 }, green: { lat: 28.918776, lon: -82.004854 } },
+      { hole: 7, par: 4, hcp: 9, greenDepth: 33, tee: { lat: 28.919259, lon: -82.003497 }, green: { lat: 28.918685, lon: -82.000894 } },
+      { hole: 8, par: 3, hcp: 3, greenDepth: 42, tee: { lat: 28.916863, lon: -82.000565 }, green: { lat: 28.915714, lon: -82.000404 } },
+      { hole: 9, par: 5, hcp: 8, greenDepth: 38, tee: { lat: 28.91188, lon: -81.998429 }, green: { lat: 28.909256, lon: -81.995445 } },
+    ],
+
+    LaurelValley: [
+      { hole: 1, par: 4, hcp: 5, greenDepth: 31, tee: { lat: 28.911606, lon: -81.993312 }, green: { lat: 28.914072, lon: -81.993029 } },
+      { hole: 2, par: 5, hcp: 6, greenDepth: 40, tee: { lat: 28.914904, lon: -81.99415 }, green: { lat: 28.918521, lon: -81.993153 } },
+      { hole: 3, par: 4, hcp: 1, greenDepth: 42, tee: { lat: 28.919511, lon: -81.993516 }, green: { lat: 28.921602, lon: -81.995307 } },
+      { hole: 4, par: 5, hcp: 9, greenDepth: 32, tee: { lat: 28.922168, lon: -81.997036 }, green: { lat: 28.924804, lon: -81.999651 } },
+      { hole: 5, par: 4, hcp: 3, greenDepth: 30, tee: { lat: 28.925267, lon: -81.998678 }, green: { lat: 28.923342, lon: -81.996906 } },
+      { hole: 6, par: 3, hcp: 8, greenDepth: 34, tee: { lat: 28.922992, lon: -81.996014 }, green: { lat: 28.922272, lon: -81.99551 } },
+      { hole: 7, par: 4, hcp: 2, greenDepth: 41, tee: { lat: 28.9204, lon: -81.992783 }, green: { lat: 28.919149, lon: -81.990133 } },
+      { hole: 8, par: 3, hcp: 7, greenDepth: 37, tee: { lat: 28.918594, lon: -81.9906 }, green: { lat: 28.918395, lon: -81.991761 } },
+      { hole: 9, par: 4, hcp: 4, greenDepth: 41, tee: { lat: 28.917349, lon: -81.99269 }, green: { lat: 28.914723, lon: -81.993205 } },
+    ],
+
+    RileyGrove: [
+      { hole: 1, par: 4, hcp: 7, greenDepth: 32, tee: { lat: 28.910095, lon: -81.989156 }, green: { lat: 28.91215, lon: -81.987983 } },
+      { hole: 2, par: 4, hcp: 2, greenDepth: 30, tee: { lat: 28.91205, lon: -81.985494 }, green: { lat: 28.914707, lon: -81.984697 } },
+      { hole: 3, par: 4, hcp: 9, greenDepth: 32, tee: { lat: 28.917976, lon: -81.98363 }, green: { lat: 28.919317, lon: -81.985533 } },
+      { hole: 4, par: 5, hcp: 4, greenDepth: 31, tee: { lat: 28.919516, lon: -81.98411 }, green: { lat: 28.919281, lon: -81.979933 } },
+      { hole: 5, par: 4, hcp: 1, greenDepth: 34, tee: { lat: 28.918801, lon: -81.978643 }, green: { lat: 28.919187, lon: -81.975673 } },
+      { hole: 6, par: 3, hcp: 8, greenDepth: 33, tee: { lat: 28.919244, lon: -81.974937 }, green: { lat: 28.918398, lon: -81.975213 } },
+      { hole: 7, par: 4, hcp: 3, greenDepth: 30, tee: { lat: 28.915833, lon: -81.976434 }, green: { lat: 28.913682, lon: -81.97516 } },
+      { hole: 8, par: 3, hcp: 6, greenDepth: 28, tee: { lat: 28.912375, lon: -81.977066 }, green: { lat: 28.911657, lon: -81.977902 } },
+      { hole: 9, par: 5, hcp: 5, greenDepth: 32, tee: { lat: 28.911511, lon: -81.980021 }, green: { lat: 28.909728, lon: -81.983721 } },
+    ],
+  },
+};
+
 export const COURSE_CATALOG = {
   "Belle Glades": BELLE_GLADES,
   "Orange Blossom": ORANGE_BLOSSOM,
@@ -239,4 +323,6 @@ export const COURSE_CATALOG = {
   "Hacienda Hills": HACIENDA_HILLS,
   "Glenview Champions": GLENVIEW_CHAMPIONS,
   "Tierra Del Sol": TIERRA_DEL_SOL,
+  "Lopez Legacy": LOPEZ_LEGACY,
+  "Palmer Legends": PALMER_LEGENDS,
 };
