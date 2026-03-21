@@ -224,14 +224,14 @@ function loadTGOverride(clubKey, nineName, holeNum, teeBox) {
   }
 }
 
-function saveTGOverride(clubKey, nineName, holeNum, teeBox, patch) {
-  const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
-  const prev = loadTGOverride(clubKey, nineName, holeNum, teeBox) || {};
-  const next = { ...prev, ...patch };
+function clearTGOverride(clubKey, nineName, holeNum, teeBox) {
   try {
-    localStorage.setItem(key, JSON.stringify(next));
-  } catch {}
-  return next;
+    const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
+    localStorage.removeItem(key);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
 }
 
 export default function App() {
@@ -497,6 +497,9 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubKey, holeNine, holeNum, teeBox, tgRev]);
 
+  const tgOverrideActive = !!(tgOverride?.tee || tgOverride?.green);
+  const tgOverrideText = tgOverrideActive ? "YES" : "NO";
+
   const teeLL = tgOverride?.tee ?? hole?.tee ?? null;
   const greenLL = tgOverride?.green ?? hole?.green ?? null;
 
@@ -746,14 +749,10 @@ export default function App() {
 
   const trustIsLow = trustLevel === "LOW";
 
-  const lastGoodYouRef = useRef(null);
-  useEffect(() => {
-    if (!trustIsLow && youNormRaw && isFinite(youNormRaw.x) && isFinite(youNormRaw.y)) {
-      lastGoodYouRef.current = youNormRaw;
-    }
-  }, [trustIsLow, youNormRaw]);
-
-  const youNorm = trustIsLow ? lastGoodYouRef.current : youNormRaw;
+  const youNorm =
+    !trustIsLow && youNormRaw && isFinite(youNormRaw.x) && isFinite(youNormRaw.y)
+      ? youNormRaw
+      : null;
 
   const alongFromTeeYards = useMemo(() => {
     const t = basePointAndPerp?.t;
@@ -886,6 +885,32 @@ export default function App() {
     } else {
       setBaselineAC(null);
     }
+  }
+
+  function handleClearTGOverride() {
+    if (!clubKey || !hole || !teeBox) {
+      window.alert("Cannot clear TG Override yet. Make sure course, hole, and tee box are selected.");
+      return;
+    }
+
+    if (!tgOverrideActive) {
+      window.alert("No Tee/Green override is saved for this hole + tee box.");
+      return;
+    }
+
+    const ok = window.confirm(
+      `Clear Tee/Green override?\n\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\n\nThis will restore tee and green coordinates back to courses.js for this hole.`
+    );
+    if (!ok) return;
+
+    const result = clearTGOverride(clubKey, hole.nine, hole.hole, teeBox);
+    if (!result.ok) {
+      window.alert("Could not clear Tee/Green override.");
+      return;
+    }
+
+    setTgRev((n) => n + 1);
+    window.alert("Tee/Green override cleared for this hole.");
   }
 
   function handleCloseAndFreshNextOpen() {
@@ -1287,6 +1312,10 @@ export default function App() {
                   Trust: <b>{trustLevel}</b>
                 </div>
 
+                <div style={{ marginBottom: 6 }}>
+                  TG Override: <b>{tgOverrideText}</b>
+                </div>
+
                 <div>
                   Tee→Green:{" "}
                   <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
@@ -1366,6 +1395,21 @@ export default function App() {
                     }}
                   >
                     Reset Cal
+                  </button>
+
+                  <button
+                    onClick={handleClearTGOverride}
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 10,
+                      border: "1px solid #333",
+                      background: "white",
+                      fontWeight: 900,
+                      fontSize: 12,
+                      width: "100%",
+                    }}
+                  >
+                    Clear TG Override
                   </button>
                 </div>
 
