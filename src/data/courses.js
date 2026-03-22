@@ -268,7 +268,7 @@ export const LOPEZ_LEGACY = {
       { hole: 5, par: 4, hcp: 1, greenDepth: 37, tee: { lat: 28.981732, lon: -82.020178 }, green: { lat: 28.980437, lon: -82.017816 } },
       { hole: 6, par: 4, hcp: 4, greenDepth: 40, tee: { lat: 28.980032, lon: -82.017279 }, green: { lat: 28.978647, lon: -82.019595 } },
       { hole: 7, par: 4, hcp: 3, greenDepth: 35, tee: { lat: 28.97773, lon: -82.020982 }, green: { lat: 28.975037, lon: -82.020903 } },
-      { hole: 8, par: 3, hcp: 9, greenDepth: 25, tee: { lat: 28.973168, lon: -82.020396 }, green: { lat: 28.972351, lon: -82.020276 } },
+      { hole: 8, par: 3, hcp: 9, greenDepth: 25, tee: { lat: 28.973358, lon: -82.020513 }, green: { lat: 28.972318, lon: -82.020297 } },
       { hole: 9, par: 5, hcp: 5, greenDepth: 33, tee: { lat: 28.971974, lon: -82.020068 }, green: { lat: 28.97232, lon: -82.015631 } },
     ],
   },
