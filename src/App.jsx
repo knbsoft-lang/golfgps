@@ -6,7 +6,7 @@ import { holeImagePath } from "./data/holeImages";
 import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-01";
+const TEST_SYNC_ID = "TEST-02";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -221,16 +221,6 @@ function loadTGOverride(clubKey, nineName, holeNum, teeBox) {
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
-  }
-}
-
-function clearTGOverride(clubKey, nineName, holeNum, teeBox) {
-  try {
-    const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
-    localStorage.removeItem(key);
-    return { ok: true };
-  } catch {
-    return { ok: false };
   }
 }
 
@@ -486,7 +476,7 @@ export default function App() {
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
   // ===== Per-hole Tee/Green overrides (localStorage) =====
-  const [tgRev, setTgRev] = useState(0);
+  const [tgRev] = useState(0);
 
   const holeNum = hole?.hole ?? null;
   const holeNine = hole?.nine ?? null;
@@ -496,9 +486,6 @@ export default function App() {
     return loadTGOverride(clubKey, holeNine, holeNum, teeBox);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubKey, holeNine, holeNum, teeBox, tgRev]);
-
-  const tgOverrideActive = !!(tgOverride?.tee || tgOverride?.green);
-  const tgOverrideText = tgOverrideActive ? "YES" : "NO";
 
   const teeLL = tgOverride?.tee ?? hole?.tee ?? null;
   const greenLL = tgOverride?.green ?? hole?.green ?? null;
@@ -596,31 +583,6 @@ export default function App() {
     }
   }, [crossCalKey]);
 
-  function saveCrossCalScale(v) {
-    if (!crossCalKey) return;
-    try {
-      localStorage.setItem(crossCalKey, String(v));
-    } catch {}
-    setCrossCalScale(v);
-  }
-
-  function resetCrossCal() {
-    if (!crossCalKey) return;
-
-    if (
-      !window.confirm(
-        "Reset cross calibration for this hole?\n\nThis will set Cal scale back to 1.000."
-      )
-    ) {
-      return;
-    }
-
-    try {
-      localStorage.removeItem(crossCalKey);
-    } catch {}
-    setCrossCalScale(1.0);
-  }
-
   const teeToTargetYards = useMemo(() => {
     if (!yardsPerNormUnit) return null;
     if (!A || !B || !Bactive) return null;
@@ -643,7 +605,7 @@ export default function App() {
   }, [yardsPerNormUnit, A, B, C, Bactive]);
 
   const YOU_SHOW_WITHIN_YARDS = 1200;
-  const [crossOffsetOn, setCrossOffsetOn] = useState(true);
+  const crossOffsetOn = true;
 
   const crossRawYardsSigned = useMemo(() => {
     if (!teeLL || !greenLL || !pos) return null;
@@ -761,58 +723,6 @@ export default function App() {
     return Math.max(0, Math.min(teeToGreenYards, t * teeToGreenYards));
   }, [basePointAndPerp, teeToGreenYards]);
 
-  function calibrateUsingTargetB() {
-    if (
-      !window.confirm(
-        "Calibrate using Target B?\n\nStand at a real landmark.\nDrag Target B onto that landmark on the image.\nThen press OK to save Cal scale for this hole."
-      )
-    ) {
-      return;
-    }
-
-    if (!basePointAndPerp) {
-      window.alert("Calibrate failed: no base point yet (need GPS + A/C).");
-      return;
-    }
-    if (!yardsPerNormUnit) {
-      window.alert("Calibrate failed: yards scale not ready yet.");
-      return;
-    }
-    if (!Bactive || !B) {
-      window.alert(
-        "Calibrate failed: you must set Target B and drag it to your landmark."
-      );
-      return;
-    }
-    if (typeof crossRawYardsSigned !== "number" || crossRawYardsSigned === 0) {
-      window.alert("Calibrate failed: cross raw not available yet.");
-      return;
-    }
-
-    const { base, perpRight } = basePointAndPerp;
-
-    const vx = B.x - base.x;
-    const vy = B.y - base.y;
-    const offsetNormSigned = vx * perpRight.x + vy * perpRight.y;
-
-    const normUnitsPerYard = 1 / yardsPerNormUnit;
-    const offsetYardsSigned = offsetNormSigned / normUnitsPerYard;
-
-    const scale = offsetYardsSigned / crossRawYardsSigned;
-
-    if (!isFinite(scale) || Math.abs(scale) < 0.01 || Math.abs(scale) > 10) {
-      window.alert(
-        `Calibrate failed: scale looks crazy (${scale}). Try again with B placed exactly on landmark.`
-      );
-      return;
-    }
-
-    saveCrossCalScale(scale);
-    window.alert(
-      `Saved cross calibration for this hole.\nScale = ${scale.toFixed(3)}`
-    );
-  }
-
   const FOOTER_H = 60;
   const TOP_BTN_TOP = 40;
   const TOP_BTN_W = 92;
@@ -885,32 +795,6 @@ export default function App() {
     } else {
       setBaselineAC(null);
     }
-  }
-
-  function handleClearTGOverride() {
-    if (!clubKey || !hole || !teeBox) {
-      window.alert("Cannot clear TG Override yet. Make sure course, hole, and tee box are selected.");
-      return;
-    }
-
-    if (!tgOverrideActive) {
-      window.alert("No Tee/Green override is saved for this hole + tee box.");
-      return;
-    }
-
-    const ok = window.confirm(
-      `Clear Tee/Green override?\n\n${clubKey} / ${hole.nine} / Hole ${hole.hole} / ${teeBox}\n\nThis will restore tee and green coordinates back to courses.js for this hole.`
-    );
-    if (!ok) return;
-
-    const result = clearTGOverride(clubKey, hole.nine, hole.hole, teeBox);
-    if (!result.ok) {
-      window.alert("Could not clear Tee/Green override.");
-      return;
-    }
-
-    setTgRev((n) => n + 1);
-    window.alert("Tee/Green override cleared for this hole.");
   }
 
   function handleCloseAndFreshNextOpen() {
@@ -1312,10 +1196,6 @@ export default function App() {
                   Trust: <b>{trustLevel}</b>
                 </div>
 
-                <div style={{ marginBottom: 6 }}>
-                  TG Override: <b>{tgOverrideText}</b>
-                </div>
-
                 <div>
                   Tee→Green:{" "}
                   <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
@@ -1337,80 +1217,6 @@ export default function App() {
                   <div style={{ marginTop: 2 }}>
                     Cal scale: <b>{crossCalScale.toFixed(3)}</b>
                   </div>
-                </div>
-
-                <div style={{ marginTop: 8 }}>
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      cursor: "pointer",
-                      opacity: 0.95,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={crossOffsetOn}
-                      onChange={(e) => setCrossOffsetOn(e.target.checked)}
-                    />
-                    <span style={{ fontWeight: 800 }}>Offset dot</span>
-                  </label>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                    marginTop: 10,
-                  }}
-                >
-                  <button
-                    onClick={calibrateUsingTargetB}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "white",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                    title="Stand at landmark, drag Target B to the landmark on image, then press this"
-                  >
-                    Calibrate (use Target B)
-                  </button>
-
-                  <button
-                    onClick={resetCrossCal}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "#f3f3f3",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                  >
-                    Reset Cal
-                  </button>
-
-                  <button
-                    onClick={handleClearTGOverride}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 10,
-                      border: "1px solid #333",
-                      background: "white",
-                      fontWeight: 900,
-                      fontSize: 12,
-                      width: "100%",
-                    }}
-                  >
-                    Clear TG Override
-                  </button>
                 </div>
 
                 <div style={{ marginTop: 10, opacity: 0.85 }}>
