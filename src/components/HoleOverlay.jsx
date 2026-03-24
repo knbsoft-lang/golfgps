@@ -130,10 +130,9 @@ export default function HoleOverlay({
 
     const nextB = saved?.B ? normPoint(saved.B, mid) : mid;
     setBpos(nextB);
+    setBactive(saved?.B ? !!saved?.Bactive : true);
 
-    setBactive(!!saved?.Bactive);
     setDragging(null);
-
     lastBTapMsRef.current = 0;
   }, [resetKey, holeKey, fallbackA, fallbackC]);
 
@@ -147,6 +146,8 @@ export default function HoleOverlay({
 
   function saveDefaults() {
     if (!holeKey) return;
+
+    // Save A / C / B as the hole's home positions
     setHoleDefaults(holeKey, { A, C, B: Bpos, Bactive });
   }
 
@@ -165,7 +166,7 @@ export default function HoleOverlay({
     setA(resetA);
     setC(resetC);
     setBpos(resetB);
-    setBactive(false);
+    setBactive(true);
     setDragging(null);
     lastBTapMsRef.current = 0;
   }
@@ -178,13 +179,11 @@ export default function HoleOverlay({
       clearDefaultsNow,
       getState,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onActionsReady, holeKey, A, C, Bpos, Bactive, fallbackA, fallbackC]);
 
   useEffect(() => {
     if (!onStateChange) return;
     onStateChange(getState());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [holeKey, A, C, Bpos, Bactive]);
 
   function endDrag() {
@@ -256,7 +255,7 @@ export default function HoleOverlay({
     }
   }
 
-  // single tap anywhere sets B
+  // tap anywhere sets temporary B for this visit to hole
   function onContainerPointerDown(e) {
     if (!setupEnabled && !allowPlayB) return;
 
@@ -359,7 +358,6 @@ export default function HoleOverlay({
       if (animRef.current.raf) cancelAnimationFrame(animRef.current.raf);
       animRef.current.raf = 0;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [youNorm?.x, youNorm?.y]);
 
   const ringPx = ringPxFromAccuracy(youAccuracyMeters);
@@ -393,7 +391,6 @@ export default function HoleOverlay({
         draggable={false}
       />
 
-      {/* AIM MODE: original overlay lines */}
       {viewMode === "aim" && (
         <>
           <svg
@@ -423,7 +420,6 @@ export default function HoleOverlay({
             )}
           </svg>
 
-          {/* accuracy ring in AIM mode */}
           {youSmooth && (
             <div
               style={{
@@ -483,7 +479,6 @@ export default function HoleOverlay({
         </>
       )}
 
-      {/* DRIVE MODE: white line to green + circle at green */}
       {viewMode === "drive" && youSmooth && rect && (
         <svg
           width="100%"
@@ -517,7 +512,6 @@ export default function HoleOverlay({
         </svg>
       )}
 
-      {/* cart always visible */}
       {youSmooth && <CartIcon norm={youSmooth} />}
     </div>
   );
@@ -604,7 +598,8 @@ function CartIcon({ norm }) {
         transform: "translate(-50%, -50%)",
         zIndex: 10,
         pointerEvents: "none",
-        filter: "drop-shadow(0 0 6px rgba(0,0,0,0.9)) drop-shadow(0 3px 8px rgba(0,0,0,0.65))",
+        filter:
+          "drop-shadow(0 0 6px rgba(0,0,0,0.9)) drop-shadow(0 3px 8px rgba(0,0,0,0.65))",
       }}
     >
       <svg
@@ -613,7 +608,6 @@ function CartIcon({ norm }) {
         viewBox={`0 0 ${W + 24} ${H + 24}`}
         style={{ overflow: "visible" }}
       >
-        {/* black outer outline */}
         <rect
           x={x}
           y={y}
@@ -626,7 +620,6 @@ function CartIcon({ norm }) {
           strokeWidth={blackStroke}
         />
 
-        {/* white outline + body */}
         <rect
           x={x}
           y={y}
@@ -639,7 +632,6 @@ function CartIcon({ norm }) {
           strokeWidth={whiteStroke}
         />
 
-        {/* vertical wheels left */}
         <line
           x1={x + wheelInset}
           y1={y + 6}
@@ -659,7 +651,6 @@ function CartIcon({ norm }) {
           strokeLinecap="round"
         />
 
-        {/* vertical wheels right */}
         <line
           x1={x + W - wheelInset}
           y1={y + 6}
@@ -679,13 +670,7 @@ function CartIcon({ norm }) {
           strokeLinecap="round"
         />
 
-        {/* center dot */}
-        <circle
-          cx={x + W / 2}
-          cy={y + H / 2}
-          r={3}
-          fill="white"
-        />
+        <circle cx={x + W / 2} cy={y + H / 2} r={3} fill="white" />
       </svg>
     </div>
   );

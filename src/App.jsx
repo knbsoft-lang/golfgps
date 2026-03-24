@@ -3,7 +3,6 @@ import { COURSE_CATALOG } from "./data/courses";
 import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
-import { getHoleDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
 const TEST_SYNC_ID = "TEST-02";
@@ -16,6 +15,9 @@ const BUILD_TEST_ID =
 const SESSION_KEY = "golfgps_lastSession_v1";
 const FRESH_ON_NEXT_OPEN_KEY = "golfgps_freshOnNextOpen_v1";
 
+const DEFAULT_A = { x: 0.5, y: 0.75 };
+const DEFAULT_C = { x: 0.5, y: 0.25 };
+
 function defaultParForHole(holeNumber) {
   const cycle = [4, 3, 5];
   const idx = Math.max(0, (holeNumber || 1) - 1) % cycle.length;
@@ -27,6 +29,11 @@ function clamp(n, a, b) {
 }
 function clamp01(n) {
   return Math.max(0, Math.min(1, n));
+}
+
+function normPoint(p, fallback) {
+  if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
+  return { x: clamp01(p.x), y: clamp01(p.y) };
 }
 
 function distNorm(p1, p2) {
@@ -397,7 +404,6 @@ export default function App() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     page,
     courseType,
@@ -408,6 +414,7 @@ export default function App() {
     teeBox,
     startHoleDisplay,
     idx,
+    hole,
   ]);
 
   const imgSrc =
@@ -484,7 +491,6 @@ export default function App() {
   const tgOverride = useMemo(() => {
     if (!clubKey || !holeNine || !holeNum || !teeBox) return null;
     return loadTGOverride(clubKey, holeNine, holeNum, teeBox);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubKey, holeNine, holeNum, teeBox, tgRev]);
 
   const teeLL = tgOverride?.tee ?? hole?.tee ?? null;
@@ -525,47 +531,32 @@ export default function App() {
   const overlayActionsRef = useRef(null);
   const [setupEnabled, setSetupEnabled] = useState(false);
 
-  // ========= BASELINE =========
-  const savedDefaults = useMemo(() => {
-    return holeKey ? getHoleDefaults(holeKey) : null;
-  }, [holeKey]);
+  // ========= Overlay baseline now comes from courses.js =========
+  const codeA = useMemo(
+    () => normPoint(hole?.overlay?.A, DEFAULT_A),
+    [hole?.overlay?.A]
+  );
+  const codeC = useMemo(
+    () => normPoint(hole?.overlay?.C, DEFAULT_C),
+    [hole?.overlay?.C]
+  );
 
-  const [baselineAC, setBaselineAC] = useState(null);
-
-  useEffect(() => {
-    if (!holeKey) {
-      setBaselineAC(null);
-      return;
-    }
-    if (savedDefaults?.A && savedDefaults?.C) {
-      setBaselineAC({ A: savedDefaults.A, C: savedDefaults.C });
-    } else {
-      setBaselineAC(null);
-    }
-  }, [holeKey, savedDefaults]);
-
-  useEffect(() => {
-    if (baselineAC) return;
-    if (!liveOverlay?.A || !liveOverlay?.C) return;
-    setBaselineAC({ A: liveOverlay.A, C: liveOverlay.C });
-  }, [baselineAC, liveOverlay]);
+  const A = liveOverlay?.A || codeA;
+  const C = liveOverlay?.C || codeC;
+  const Bactive = !!liveOverlay?.Bactive;
+  const B = liveOverlay?.B || null;
 
   const baselineLen = useMemo(() => {
-    if (!baselineAC?.A || !baselineAC?.C) return null;
-    const d = distNorm(baselineAC.A, baselineAC.C);
+    if (!A || !C) return null;
+    const d = distNorm(A, C);
     return d > 0.0001 ? d : null;
-  }, [baselineAC]);
+  }, [A, C]);
 
   const yardsPerNormUnit = useMemo(() => {
     if (typeof teeToGreenYards !== "number") return null;
     if (!baselineLen) return null;
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
-
-  const A = liveOverlay?.A || baselineAC?.A || null;
-  const C = liveOverlay?.C || baselineAC?.C || null;
-  const Bactive = !!liveOverlay?.Bactive;
-  const B = liveOverlay?.B || null;
 
   // ========= Cross calibration storage =========
   const crossCalKey = holeKey ? `golfgps_crossCal_${holeKey}` : "";
@@ -773,8 +764,6 @@ export default function App() {
 
   function handleSaveDefaults() {
     overlayActionsRef.current?.saveDefaults?.();
-    const st = overlayActionsRef.current?.getState?.();
-    if (st?.A && st?.C) setBaselineAC({ A: st.A, C: st.C });
   }
 
   function handleClearTarget() {
@@ -783,18 +772,11 @@ export default function App() {
 
   function handleClearDefaults() {
     const ok = window.confirm(
-      "Clear saved defaults for this hole?\n\nThis will remove saved A / C / B positions for the current hole and snap back to the built-in defaults."
+      "Clear saved target for this hole?\n\nThis now clears saved B / target only.\nA and C come from courses.js."
     );
     if (!ok) return;
 
     overlayActionsRef.current?.clearDefaultsNow?.();
-
-    const st = overlayActionsRef.current?.getState?.();
-    if (st?.A && st?.C) {
-      setBaselineAC({ A: st.A, C: st.C });
-    } else {
-      setBaselineAC(null);
-    }
   }
 
   function handleCloseAndFreshNextOpen() {
@@ -867,7 +849,6 @@ export default function App() {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, holeKey]);
 
   useEffect(() => {
@@ -1131,6 +1112,8 @@ export default function App() {
                 imageSrc={imgSrc}
                 resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}`}
                 holeKey={holeKey}
+                initialA={hole?.overlay?.A}
+                initialC={hole?.overlay?.C}
                 setupEnabled={setupEnabled}
                 allowPlayB={true}
                 youNorm={youNorm}
@@ -1176,6 +1159,10 @@ export default function App() {
 
                 <div style={{ marginBottom: 6 }}>
                   Sync: <b>{TEST_SYNC_ID}</b>
+                </div>
+
+                <div>
+                  Build: <b>{BUILD_TEST_ID}</b>
                 </div>
 
                 <div>

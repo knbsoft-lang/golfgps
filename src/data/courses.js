@@ -14,6 +14,10 @@
  * - par: number
  * - hcp: number  (handicap / stroke index)
  * - greenDepth: number  (green depth in yards)
+ * - overlay: {
+ *     A: { x: number, y: number },   // tee marker position on image
+ *     C: { x: number, y: number }    // green marker position on image
+ *   }
  */
 
 export const BELLE_GLADES = {
