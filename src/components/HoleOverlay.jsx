@@ -1,4 +1,3 @@
-// src/components/HoleOverlay.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 function clamp01(n) {
@@ -136,13 +135,16 @@ export default function HoleOverlay({
     return { holeKey, A, B: Bpos, C, Bactive };
   }
 
-  function copyOverlayJson() {
-    const payload = {
+  function getOverlayOnly() {
+    return {
       A: { x: +A.x.toFixed(4), y: +A.y.toFixed(4) },
       B: { x: +Bpos.x.toFixed(4), y: +Bpos.y.toFixed(4) },
       C: { x: +C.x.toFixed(4), y: +C.y.toFixed(4) },
     };
+  }
 
+  function copyOverlayJson() {
+    const payload = getOverlayOnly();
     const text = JSON.stringify(payload, null, 2);
 
     try {
@@ -157,6 +159,7 @@ export default function HoleOverlay({
     if (!onActionsReady) return;
     onActionsReady({
       getState,
+      getOverlayOnly,
       copyOverlayJson,
     });
   }, [onActionsReady, holeKey, A, Bpos, C, Bactive]);

@@ -3,6 +3,19 @@ import { COURSE_CATALOG } from "./data/courses";
 import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
+import {
+  buildExportForCourse,
+  buildExportForNine,
+  clearOverlayForHole,
+  downloadOverlayJson,
+  getOverlayExportStore,
+  getSavedCountForCourse,
+  getSavedCountForNine,
+  getSavedOverlayForHole,
+  makeCourseExportFileName,
+  makeNineExportFileName,
+  saveOverlayForHole,
+} from "./data/overlayExport";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
 const TEST_SYNC_ID = "TEST-02";
@@ -218,6 +231,18 @@ function loadTGOverride(clubKey, nineName, holeNum, teeBox) {
   } catch {
     return null;
   }
+}
+
+function styleSetupBtn(background = "white") {
+  return {
+    padding: "8px 10px",
+    borderRadius: 10,
+    border: "1px solid #333",
+    background,
+    fontWeight: 900,
+    fontSize: 13,
+    pointerEvents: "auto",
+  };
 }
 
 export default function App() {
@@ -499,22 +524,31 @@ export default function App() {
   const siText = `SI ${siValue ?? "—"}`;
 
   const [liveOverlay, setLiveOverlay] = useState(null);
-  useEffect(() => setLiveOverlay(null), [holeKey]);
+  const [overlayResetNonce, setOverlayResetNonce] = useState(0);
+  useEffect(() => {
+    setLiveOverlay(null);
+    setOverlayResetNonce(0);
+  }, [holeKey]);
 
   const overlayActionsRef = useRef(null);
   const [setupEnabled, setSetupEnabled] = useState(false);
 
+  const savedOverlayForHole = useMemo(() => {
+    if (!clubKey || !holeNine || !holeNum) return null;
+    return getSavedOverlayForHole(clubKey, holeNine, holeNum);
+  }, [clubKey, holeNine, holeNum, overlayResetNonce]);
+
   const codeA = useMemo(
-    () => normPoint(hole?.overlay?.A, { x: 0.5, y: 0.75 }),
-    [hole?.overlay?.A]
+    () => normPoint(savedOverlayForHole?.A ?? hole?.overlay?.A, { x: 0.5, y: 0.75 }),
+    [savedOverlayForHole?.A, hole?.overlay?.A]
   );
   const codeB = useMemo(
-    () => normPoint(hole?.overlay?.B, { x: 0.5, y: 0.5 }),
-    [hole?.overlay?.B]
+    () => normPoint(savedOverlayForHole?.B ?? hole?.overlay?.B, { x: 0.5, y: 0.5 }),
+    [savedOverlayForHole?.B, hole?.overlay?.B]
   );
   const codeC = useMemo(
-    () => normPoint(hole?.overlay?.C, { x: 0.5, y: 0.25 }),
-    [hole?.overlay?.C]
+    () => normPoint(savedOverlayForHole?.C ?? hole?.overlay?.C, { x: 0.5, y: 0.25 }),
+    [savedOverlayForHole?.C, hole?.overlay?.C]
   );
 
   const A = liveOverlay?.A || codeA;
@@ -830,6 +864,125 @@ export default function App() {
       ? roundYards(Math.max(0, youToGreenYards - greenDepth / 2))
       : null;
 
+  const overlayStoreRevRef = useRef(0);
+  const [, forceOverlayStoreRender] = useState(0);
+
+  function bumpOverlayStoreRev() {
+    overlayStoreRevRef.current += 1;
+    forceOverlayStoreRender((v) => v + 1);
+  }
+
+  const savedCountNine = useMemo(() => {
+    if (!clubKey || !holeNine) return 0;
+    return getSavedCountForNine(clubKey, holeNine);
+  }, [clubKey, holeNine, overlayStoreRevRef.current]);
+
+  const savedCountCourse = useMemo(() => {
+    if (!clubKey) return 0;
+    return getSavedCountForCourse(clubKey);
+  }, [clubKey, overlayStoreRevRef.current]);
+
+  function handleSaveABC() {
+    if (!clubKey || !holeNine || !holeNum) {
+      window.alert("No current hole to save.");
+      return;
+    }
+
+    const state = overlayActionsRef.current?.getState?.();
+    if (!state) {
+      window.alert("Overlay state not ready yet.");
+      return;
+    }
+
+    const saved = saveOverlayForHole(clubKey, holeNine, holeNum, state);
+    if (!saved) {
+      window.alert("Save ABC failed.");
+      return;
+    }
+
+    bumpOverlayStoreRev();
+    window.alert(
+      `Saved ABC\n\n${clubKey}\n${holeNine} - Hole ${holeNum}`
+    );
+  }
+
+  function handleClearABC() {
+    if (!clubKey || !holeNine || !holeNum) {
+      window.alert("No current hole to clear.");
+      return;
+    }
+
+    const ok = window.confirm(
+      `Clear saved ABC for:\n\n${clubKey}\n${holeNine} - Hole ${holeNum}\n\nThis only removes the builder-saved overlay for this hole.`
+    );
+    if (!ok) return;
+
+    clearOverlayForHole(clubKey, holeNine, holeNum);
+    setLiveOverlay(null);
+    setOverlayResetNonce((n) => n + 1);
+    bumpOverlayStoreRev();
+
+    window.alert(
+      `Cleared saved ABC\n\n${clubKey}\n${holeNine} - Hole ${holeNum}`
+    );
+  }
+
+  function handleExportCurrentNine() {
+    if (!clubKey || !holeNine) {
+      window.alert("No current nine to export.");
+      return;
+    }
+
+    const data = buildExportForNine(clubKey, holeNine);
+    if (!data) {
+      window.alert("No saved holes found for this nine.");
+      return;
+    }
+
+    const ok = downloadOverlayJson(
+      data,
+      makeNineExportFileName(clubKey, holeNine)
+    );
+
+    if (!ok) {
+      window.alert("Export failed.");
+      return;
+    }
+
+    window.alert(
+      `Exported Current Nine\n\n${clubKey}\n${holeNine}\n\nSaved holes: ${savedCountNine}`
+    );
+  }
+
+  function handleExportCurrentCourse() {
+    if (!clubKey) {
+      window.alert("No current course to export.");
+      return;
+    }
+
+    const data = buildExportForCourse(clubKey);
+    if (!data) {
+      window.alert("No saved holes found for this course.");
+      return;
+    }
+
+    const ok = downloadOverlayJson(data, makeCourseExportFileName(clubKey));
+    if (!ok) {
+      window.alert("Export failed.");
+      return;
+    }
+
+    window.alert(
+      `Exported Current Course\n\n${clubKey}\n\nSaved holes: ${savedCountCourse}`
+    );
+  }
+
+  function handleShowSavedStore() {
+    const store = getOverlayExportStore();
+    const json = JSON.stringify(store, null, 2);
+    window.prompt("Current saved overlay store:", json);
+  }
+
   return (
     <div
       style={{
@@ -1052,11 +1205,11 @@ export default function App() {
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
-                resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}`}
+                resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}-${overlayResetNonce}`}
                 holeKey={holeKey}
-                initialA={hole?.overlay?.A}
-                initialB={hole?.overlay?.B}
-                initialC={hole?.overlay?.C}
+                initialA={savedOverlayForHole?.A ?? hole?.overlay?.A}
+                initialB={savedOverlayForHole?.B ?? hole?.overlay?.B}
+                initialC={savedOverlayForHole?.C ?? hole?.overlay?.C}
                 setupEnabled={setupEnabled}
                 allowPlayB={true}
                 youNorm={youNorm}
@@ -1087,7 +1240,7 @@ export default function App() {
                   zIndex: 10002,
                   pointerEvents: "auto",
                   userSelect: "none",
-                  width: 200,
+                  width: 220,
                 }}
               >
                 <div style={{ fontWeight: 900, marginBottom: 4 }}>GPS</div>
@@ -1153,6 +1306,13 @@ export default function App() {
                 <div style={{ marginTop: 10, opacity: 0.85 }}>
                   Near hole:{" "}
                   <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
+                </div>
+
+                <div style={{ marginTop: 10, opacity: 0.95 }}>
+                  Saved Nine: <b>{savedCountNine}</b>
+                </div>
+                <div style={{ opacity: 0.95 }}>
+                  Saved Course: <b>{savedCountCourse}</b>
                 </div>
               </div>
             )}
@@ -1224,11 +1384,11 @@ export default function App() {
                 style={{
                   position: "fixed",
                   left: 10,
-                  right: 10,
+                  right: 120,
                   top: 10,
                   display: "flex",
                   gap: 10,
-                  justifyContent: "flex-end",
+                  justifyContent: "flex-start",
                   flexWrap: "wrap",
                   zIndex: 10001,
                   pointerEvents: "none",
@@ -1250,31 +1410,50 @@ export default function App() {
                 </div>
 
                 <button
+                  onClick={handleSaveABC}
+                  style={styleSetupBtn("white")}
+                >
+                  Save ABC
+                </button>
+
+                <button
+                  onClick={handleClearABC}
+                  style={styleSetupBtn("#f3f3f3")}
+                >
+                  Clear ABC
+                </button>
+
+                <button
+                  onClick={handleExportCurrentNine}
+                  style={styleSetupBtn("white")}
+                >
+                  Export Current Nine
+                </button>
+
+                <button
+                  onClick={handleExportCurrentCourse}
+                  style={styleSetupBtn("white")}
+                >
+                  Export Current Course
+                </button>
+
+                <button
                   onClick={() => overlayActionsRef.current?.copyOverlayJson?.()}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 13,
-                    pointerEvents: "auto",
-                  }}
+                  style={styleSetupBtn("white")}
                 >
                   Copy Overlay
                 </button>
 
                 <button
+                  onClick={handleShowSavedStore}
+                  style={styleSetupBtn("#f3f3f3")}
+                >
+                  View Saved Store
+                </button>
+
+                <button
                   onClick={() => setSetupEnabled(false)}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#f3f3f3",
-                    fontWeight: 900,
-                    fontSize: 13,
-                    pointerEvents: "auto",
-                  }}
+                  style={styleSetupBtn("#f3f3f3")}
                 >
                   Exit Setup
                 </button>
