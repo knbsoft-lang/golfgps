@@ -3,9 +3,10 @@ import { COURSE_CATALOG } from "./data/courses";
 import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
+import { clearAllDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-07";
+const TEST_SYNC_ID = "TEST-08";
 
 // ✅ AUTO BUILD ID (changes every time you run `npm run build`)
 const BUILD_TEST_ID =
@@ -14,9 +15,6 @@ const BUILD_TEST_ID =
 // ===== Session persistence (resume where you left off) =====
 const SESSION_KEY = "golfgps_lastSession_v1";
 const FRESH_ON_NEXT_OPEN_KEY = "golfgps_freshOnNextOpen_v1";
-
-const DEFAULT_A = { x: 0.5, y: 0.75 };
-const DEFAULT_C = { x: 0.5, y: 0.25 };
 
 function defaultParForHole(holeNumber) {
   const cycle = [4, 3, 5];
@@ -31,15 +29,15 @@ function clamp01(n) {
   return Math.max(0, Math.min(1, n));
 }
 
-function normPoint(p, fallback) {
-  if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
-  return { x: clamp01(p.x), y: clamp01(p.y) };
-}
-
 function distNorm(p1, p2) {
   const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
   const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
   return Math.hypot(dx, dy);
+}
+
+function normPoint(p, fallback) {
+  if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
+  return { x: clamp01(p.x), y: clamp01(p.y) };
 }
 
 function buildRound(club, mode, nineA, nineB) {
@@ -255,7 +253,6 @@ export default function App() {
   const [nineA, setNineA] = useState("");
   const [nineB, setNineB] = useState("");
 
-  // ===== Restore session on load (unless CLOSE was pressed) =====
   const pendingRestoreRef = useRef(null);
   const didInitRestoreRef = useRef(false);
 
@@ -404,18 +401,7 @@ export default function App() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [
-    page,
-    courseType,
-    clubKey,
-    mode,
-    nineA,
-    nineB,
-    teeBox,
-    startHoleDisplay,
-    idx,
-    hole,
-  ]);
+  }, [page, courseType, clubKey, mode, nineA, nineB, teeBox, startHoleDisplay, idx, hole]);
 
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
@@ -428,7 +414,6 @@ export default function App() {
         )}`
       : "";
 
-  // ========= GPS =========
   const [pos, setPos] = useState(null);
   const [gpsStatus, setGpsStatus] = useState("GPS not started");
   const watchIdRef = useRef(null);
@@ -482,7 +467,6 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
-  // ===== Per-hole Tee/Green overrides (localStorage) =====
   const [tgRev] = useState(0);
 
   const holeNum = hole?.hole ?? null;
@@ -513,7 +497,6 @@ export default function App() {
     return Math.min(ydT, ydG);
   }, [pos, teeLL, greenLL]);
 
-  // ========= Par + SI =========
   const parValue =
     typeof hole?.par === "number"
       ? hole.par
@@ -524,20 +507,18 @@ export default function App() {
   const parText = `Par ${parValue}`;
   const siText = `SI ${siValue ?? "—"}`;
 
-  // ========= Overlay live state =========
   const [liveOverlay, setLiveOverlay] = useState(null);
   useEffect(() => setLiveOverlay(null), [holeKey]);
 
   const overlayActionsRef = useRef(null);
   const [setupEnabled, setSetupEnabled] = useState(false);
 
-  // ========= Overlay baseline now comes from courses.js =========
   const codeA = useMemo(
-    () => normPoint(hole?.overlay?.A, DEFAULT_A),
+    () => normPoint(hole?.overlay?.A, { x: 0.5, y: 0.75 }),
     [hole?.overlay?.A]
   );
   const codeC = useMemo(
-    () => normPoint(hole?.overlay?.C, DEFAULT_C),
+    () => normPoint(hole?.overlay?.C, { x: 0.5, y: 0.25 }),
     [hole?.overlay?.C]
   );
 
@@ -558,7 +539,6 @@ export default function App() {
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
 
-  // ========= Cross calibration storage =========
   const crossCalKey = holeKey ? `golfgps_crossCal_${holeKey}` : "";
   const [crossCalScale, setCrossCalScale] = useState(1.0);
 
@@ -585,15 +565,6 @@ export default function App() {
     if (!B || !C || !Bactive) return null;
     return roundYards(distNorm(B, C) * yardsPerNormUnit);
   }, [yardsPerNormUnit, B, C, Bactive]);
-
-  const modeledTotalYards = useMemo(() => {
-    if (!yardsPerNormUnit || !A || !C) return null;
-
-    if (!Bactive || !B) {
-      return roundYards(distNorm(A, C) * yardsPerNormUnit);
-    }
-    return roundYards((distNorm(A, B) + distNorm(B, C)) * yardsPerNormUnit);
-  }, [yardsPerNormUnit, A, B, C, Bactive]);
 
   const YOU_SHOW_WITHIN_YARDS = 1200;
   const crossOffsetOn = true;
@@ -772,11 +743,29 @@ export default function App() {
 
   function handleClearDefaults() {
     const ok = window.confirm(
-      "Clear saved target for this hole?\n\nThis now clears saved B / target only.\nA and C come from courses.js."
+      "Clear saved defaults for this hole?\n\nThis will remove saved A / C / B positions for the current hole."
     );
     if (!ok) return;
 
     overlayActionsRef.current?.clearDefaultsNow?.();
+  }
+
+  function handleClearAllDefaults() {
+    const ok = window.confirm(
+      "Clear ALL saved defaults on this device?\n\nThis wipes all saved hole defaults on THIS tablet or PC only."
+    );
+    if (!ok) return;
+
+    const result = clearAllDefaults();
+
+    if (result?.ok) {
+      window.alert(
+        "All saved defaults on this device were cleared.\n\nClose and reopen the app to verify."
+      );
+      window.location.reload();
+    } else {
+      window.alert("Could not clear defaults.");
+    }
   }
 
   function handleCloseAndFreshNextOpen() {
@@ -811,8 +800,7 @@ export default function App() {
       ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000))
       : null;
 
-  // ===== Phase 4: DRIVE vs AIM mode (no buttons) =====
-  const [viewMode, setViewMode] = useState("aim"); // "aim" | "drive"
+  const [viewMode, setViewMode] = useState("aim");
   const [teeDepartureReached, setTeeDepartureReached] = useState(false);
   const lastInteractMsRef = useRef(Date.now());
   const idleTimerRef = useRef(null);
@@ -870,7 +858,6 @@ export default function App() {
     }, 15000);
   }, [page, alongFromTeeYards, trustIsLow, teeDepartureReached]);
 
-  // Green depth from hole data
   const greenDepth = typeof hole?.greenDepth === "number" ? hole.greenDepth : null;
 
   const greenCenterYards = youToGreenYards;
@@ -892,7 +879,6 @@ export default function App() {
         minHeight: "100vh",
       }}
     >
-      {/* HOME PAGE */}
       {page === "home" && (
         <div style={{ padding: "14px 16px 16px 16px", maxWidth: 720 }}>
           <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 10 }}>
@@ -1036,7 +1022,6 @@ export default function App() {
         </div>
       )}
 
-      {/* PLAY PAGE */}
       {page === "play" && (
         <>
           <div
@@ -1050,7 +1035,6 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {/* Arrow boxes ONLY when Target B exists */}
             {viewMode === "aim" && Bactive && (
               <>
                 <ArrowYardBox
@@ -1066,7 +1050,6 @@ export default function App() {
               </>
             )}
 
-            {/* Top-left white green box */}
             <div
               style={{
                 position: "fixed",
@@ -1106,7 +1089,6 @@ export default function App() {
               <div style={{ fontSize: 18 }}>{greenFrontYards ?? "—"}</div>
             </div>
 
-            {/* Overlay + YOU cart */}
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -1129,7 +1111,6 @@ export default function App() {
               <div style={{ padding: 12, color: "white" }}>No image</div>
             )}
 
-            {/* GPS DEBUG (ONLY visible in SETUP MODE) */}
             {setupEnabled && (
               <div
                 style={{
@@ -1213,7 +1194,6 @@ export default function App() {
               </div>
             )}
 
-            {/* SETUP / CLOSE / HOME stack */}
             <button
               onClick={setupEnabled ? undefined : enterSetup}
               style={{
@@ -1276,7 +1256,6 @@ export default function App() {
               HOME
             </button>
 
-            {/* SETUP CONTROLS */}
             {setupEnabled && (
               <div
                 style={{
@@ -1338,6 +1317,22 @@ export default function App() {
                 </button>
 
                 <button
+                  onClick={handleClearAllDefaults}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #333",
+                    background: "#ffe8e8",
+                    color: "#900",
+                    fontWeight: 900,
+                    fontSize: 13,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  Clear ALL Defaults
+                </button>
+
+                <button
                   onClick={handleClearTarget}
                   style={{
                     padding: "8px 10px",
@@ -1370,7 +1365,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Footer */}
           <div
             style={{
               position: "fixed",
