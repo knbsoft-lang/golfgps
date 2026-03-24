@@ -1,13 +1,12 @@
 // src/components/HoleOverlay.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  clamp01,
-  getHoleDefaults,
-  setHoleDefaults,
-  clearHoleDefaults,
-} from "../data/holeDefaults";
+
+function clamp01(n) {
+  return Math.max(0, Math.min(1, n));
+}
 
 const DEFAULT_A = { x: 0.5, y: 0.75 };
+const DEFAULT_B = { x: 0.5, y: 0.5 };
 const DEFAULT_C = { x: 0.5, y: 0.25 };
 
 const BLOCK_B_NEAR_ENDPOINT_PX = 35;
@@ -16,8 +15,6 @@ const DOUBLE_TAP_MS = 350;
 const HIT_A = 46;
 const HIT_B = 54;
 const HIT_C = 46;
-
-// accuracy ring scale
 const ACCURACY_RING_SCALE = 1.25;
 
 function normPoint(p, fallback) {
@@ -65,23 +62,19 @@ export default function HoleOverlay({
   resetKey,
   holeKey,
   initialA,
+  initialB,
   initialC,
-
   setupEnabled = false,
   allowPlayB = true,
-
   youNorm = null,
   youAccuracyMeters = null,
-
   viewMode = "aim",
   onUserInteract = null,
-
   onStateChange,
   onActionsReady,
 }) {
   const containerRef = useRef(null);
   const [rect, setRect] = useState(null);
-
   const lastBTapMsRef = useRef(0);
 
   useEffect(() => {
@@ -103,88 +96,75 @@ export default function HoleOverlay({
   const fallbackA = useMemo(() => normPoint(initialA, DEFAULT_A), [initialA]);
   const fallbackC = useMemo(() => normPoint(initialC, DEFAULT_C), [initialC]);
 
+  const defaultBFromAC = useMemo(
+    () => ({
+      x: clamp01((fallbackA.x + fallbackC.x) / 2),
+      y: clamp01((fallbackA.y + fallbackC.y) / 2),
+    }),
+    [fallbackA, fallbackC]
+  );
+
+  const fallbackB = useMemo(
+    () => normPoint(initialB, defaultBFromAC || DEFAULT_B),
+    [initialB, defaultBFromAC]
+  );
+
   const [A, setA] = useState(fallbackA);
+  const [Bpos, setBpos] = useState(fallbackB);
   const [C, setC] = useState(fallbackC);
-
-  const [Bpos, setBpos] = useState({
-    x: clamp01((fallbackA.x + fallbackC.x) / 2),
-    y: clamp01((fallbackA.y + fallbackC.y) / 2),
-  });
-  const [Bactive, setBactive] = useState(false);
-
+  const [Bactive, setBactive] = useState(true);
   const [dragging, setDragging] = useState(null);
 
   useEffect(() => {
-    const saved = holeKey ? getHoleDefaults(holeKey) : null;
-
-    const nextA = saved?.A ? normPoint(saved.A, fallbackA) : fallbackA;
-    const nextC = saved?.C ? normPoint(saved.C, fallbackC) : fallbackC;
-
-    setA(nextA);
-    setC(nextC);
-
-    const mid = {
+    const nextA = normPoint(initialA, DEFAULT_A);
+    const nextC = normPoint(initialC, DEFAULT_C);
+    const nextMid = {
       x: clamp01((nextA.x + nextC.x) / 2),
       y: clamp01((nextA.y + nextC.y) / 2),
     };
+    const nextB = normPoint(initialB, nextMid);
 
-    const nextB = saved?.B ? normPoint(saved.B, mid) : mid;
+    setA(nextA);
     setBpos(nextB);
-    setBactive(saved?.B ? !!saved?.Bactive : true);
-
-    setDragging(null);
-    lastBTapMsRef.current = 0;
-  }, [resetKey, holeKey, fallbackA, fallbackC]);
-
-  function getState() {
-    return { holeKey, A, C, B: Bpos, Bactive };
-  }
-
-  function clearTarget() {
-    setBactive(false);
-  }
-
-  function saveDefaults() {
-    if (!holeKey) return;
-
-    // Save A / C / B as the hole's home positions
-    setHoleDefaults(holeKey, { A, C, B: Bpos, Bactive });
-  }
-
-  function clearDefaultsNow() {
-    if (!holeKey) return;
-
-    clearHoleDefaults(holeKey);
-
-    const resetA = fallbackA;
-    const resetC = fallbackC;
-    const resetB = {
-      x: clamp01((resetA.x + resetC.x) / 2),
-      y: clamp01((resetA.y + resetC.y) / 2),
-    };
-
-    setA(resetA);
-    setC(resetC);
-    setBpos(resetB);
+    setC(nextC);
     setBactive(true);
     setDragging(null);
     lastBTapMsRef.current = 0;
+  }, [resetKey, initialA, initialB, initialC]);
+
+  function getState() {
+    return { holeKey, A, B: Bpos, C, Bactive };
+  }
+
+  function copyOverlayJson() {
+    const payload = {
+      A: { x: +A.x.toFixed(4), y: +A.y.toFixed(4) },
+      B: { x: +Bpos.x.toFixed(4), y: +Bpos.y.toFixed(4) },
+      C: { x: +C.x.toFixed(4), y: +C.y.toFixed(4) },
+    };
+
+    const text = JSON.stringify(payload, null, 2);
+
+    try {
+      navigator.clipboard.writeText(text);
+      window.alert(`Overlay copied for ${holeKey || "hole"}:\n\n${text}`);
+    } catch {
+      window.prompt("Copy this overlay JSON:", text);
+    }
   }
 
   useEffect(() => {
     if (!onActionsReady) return;
     onActionsReady({
-      saveDefaults,
-      clearTarget,
-      clearDefaultsNow,
       getState,
+      copyOverlayJson,
     });
-  }, [onActionsReady, holeKey, A, C, Bpos, Bactive, fallbackA, fallbackC]);
+  }, [onActionsReady, holeKey, A, Bpos, C, Bactive]);
 
   useEffect(() => {
     if (!onStateChange) return;
     onStateChange(getState());
-  }, [holeKey, A, C, Bpos, Bactive]);
+  }, [holeKey, A, Bpos, C, Bactive]);
 
   function endDrag() {
     setDragging(null);
@@ -201,7 +181,6 @@ export default function HoleOverlay({
     e.stopPropagation();
 
     if (onUserInteract) onUserInteract();
-
     if (!canDrag(which)) return;
 
     if (which === "B") {
@@ -210,7 +189,7 @@ export default function HoleOverlay({
       const now = Date.now();
       if (now - lastBTapMsRef.current <= DOUBLE_TAP_MS) {
         lastBTapMsRef.current = 0;
-        clearTarget();
+        setBactive(false);
         setDragging(null);
         return;
       }
@@ -255,7 +234,6 @@ export default function HoleOverlay({
     }
   }
 
-  // tap anywhere sets temporary B for this visit to hole
   function onContainerPointerDown(e) {
     if (!setupEnabled && !allowPlayB) return;
 
@@ -297,12 +275,11 @@ export default function HoleOverlay({
   }
 
   const Apx = rect ? pxFromNorm(A, rect) : { x: 0, y: 0 };
-  const Cpx = rect ? pxFromNorm(C, rect) : { x: 0, y: 0 };
   const Bpx = rect ? pxFromNorm(Bpos, rect) : { x: 0, y: 0 };
+  const Cpx = rect ? pxFromNorm(C, rect) : { x: 0, y: 0 };
 
   const lineClickable = setupEnabled || allowPlayB;
 
-  // smooth cart movement
   const [youSmooth, setYouSmooth] = useState(null);
   const animRef = useRef({ raf: 0, from: null, to: null, t0: 0 });
 
@@ -330,10 +307,7 @@ export default function HoleOverlay({
     const DURATION_MS = 350;
 
     const step = (now) => {
-      const t = Math.max(
-        0,
-        Math.min(1, (now - animRef.current.t0) / DURATION_MS)
-      );
+      const t = Math.max(0, Math.min(1, (now - animRef.current.t0) / DURATION_MS));
       const e = 1 - Math.pow(1 - t, 3);
 
       const x =
@@ -453,7 +427,7 @@ export default function HoleOverlay({
             norm={A}
             onDown={(e) => onPointerDown("A", e)}
             pointerEnabled={true}
-            cursor={"grab"}
+            cursor="grab"
             hitSize={HIT_A}
           />
 
@@ -473,7 +447,7 @@ export default function HoleOverlay({
             norm={C}
             onDown={(e) => onPointerDown("C", e)}
             pointerEnabled={true}
-            cursor={"grab"}
+            cursor="grab"
             hitSize={HIT_C}
           />
         </>
@@ -519,10 +493,8 @@ export default function HoleOverlay({
 
 function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
   const hs = typeof hitSize === "number" ? hitSize : 44;
-
   const visibleSize = kind === "A" ? 30 : kind === "B" ? 30 : 18;
   const dotSize = kind === "C" ? 5 : 6;
-
   const borderRadius = kind === "A" ? 6 : 999;
 
   return (
@@ -579,13 +551,10 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
 function CartIcon({ norm }) {
   const W = 26;
   const H = 36;
-
   const x = 12;
   const y = 12;
-
   const wheelInset = 4;
   const wheelLen = 7;
-
   const whiteStroke = 2.6;
   const blackStroke = 5;
 

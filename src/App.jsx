@@ -3,16 +3,15 @@ import { COURSE_CATALOG } from "./data/courses";
 import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
-import { clearAllDefaults } from "./data/holeDefaults";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-08";
+const TEST_SYNC_ID = "TEST-02";
 
-// ✅ AUTO BUILD ID (changes every time you run `npm run build`)
+// AUTO BUILD ID
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
 
-// ===== Session persistence (resume where you left off) =====
+// Session persistence
 const SESSION_KEY = "golfgps_lastSession_v1";
 const FRESH_ON_NEXT_OPEN_KEY = "golfgps_freshOnNextOpen_v1";
 
@@ -25,6 +24,7 @@ function defaultParForHole(holeNumber) {
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
+
 function clamp01(n) {
   return Math.max(0, Math.min(1, n));
 }
@@ -72,10 +72,6 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
-/**
- * Bearing-based projection to compute progress along Tee->Green.
- * Returns t in [0..1]
- */
 function projectAlongTeeGreen(tee, green, pos) {
   if (!tee || !green || !pos) return null;
 
@@ -117,10 +113,6 @@ function projectAlongTeeGreen(tee, green, pos) {
   return Math.max(0, Math.min(1, t));
 }
 
-/**
- * Cross-track using local flat approximation near tee.
- * Returns signed cross meters: +RIGHT, -LEFT relative to tee->green.
- */
 function crossTrackMetersRightPositive(tee, green, pos) {
   if (!tee || !green || !pos) return null;
 
@@ -142,8 +134,8 @@ function crossTrackMetersRightPositive(tee, green, pos) {
   const len = Math.hypot(ACx, ACy);
   if (!isFinite(len) || len < 0.5) return null;
 
-  const z = ACx * APy - ACy * APx; // + => LEFT (math)
-  const crossMeters = -z / len; // flip => +RIGHT
+  const z = ACx * APy - ACy * APx;
+  const crossMeters = -z / len;
 
   return crossMeters;
 }
@@ -210,7 +202,6 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
   );
 }
 
-// ===== Tee/Green Override storage (per hole + tee box) =====
 function tgOverrideKey(clubKey, nineName, holeNum, teeBox) {
   const ck = (clubKey || "").replace(/\s+/g, "");
   const nk = (nineName || "").replace(/\s+/g, "");
@@ -517,15 +508,19 @@ export default function App() {
     () => normPoint(hole?.overlay?.A, { x: 0.5, y: 0.75 }),
     [hole?.overlay?.A]
   );
+  const codeB = useMemo(
+    () => normPoint(hole?.overlay?.B, { x: 0.5, y: 0.5 }),
+    [hole?.overlay?.B]
+  );
   const codeC = useMemo(
     () => normPoint(hole?.overlay?.C, { x: 0.5, y: 0.25 }),
     [hole?.overlay?.C]
   );
 
   const A = liveOverlay?.A || codeA;
+  const Bactive = liveOverlay?.Bactive ?? true;
+  const B = liveOverlay?.B || codeB;
   const C = liveOverlay?.C || codeC;
-  const Bactive = !!liveOverlay?.Bactive;
-  const B = liveOverlay?.B || null;
 
   const baselineLen = useMemo(() => {
     if (!A || !C) return null;
@@ -731,41 +726,6 @@ export default function App() {
 
   function goHome() {
     setPage("home");
-  }
-
-  function handleSaveDefaults() {
-    overlayActionsRef.current?.saveDefaults?.();
-  }
-
-  function handleClearTarget() {
-    overlayActionsRef.current?.clearTarget?.();
-  }
-
-  function handleClearDefaults() {
-    const ok = window.confirm(
-      "Clear saved defaults for this hole?\n\nThis will remove saved A / C / B positions for the current hole."
-    );
-    if (!ok) return;
-
-    overlayActionsRef.current?.clearDefaultsNow?.();
-  }
-
-  function handleClearAllDefaults() {
-    const ok = window.confirm(
-      "Clear ALL saved defaults on this device?\n\nThis wipes all saved hole defaults on THIS tablet or PC only."
-    );
-    if (!ok) return;
-
-    const result = clearAllDefaults();
-
-    if (result?.ok) {
-      window.alert(
-        "All saved defaults on this device were cleared.\n\nClose and reopen the app to verify."
-      );
-      window.location.reload();
-    } else {
-      window.alert("Could not clear defaults.");
-    }
   }
 
   function handleCloseAndFreshNextOpen() {
@@ -1095,6 +1055,7 @@ export default function App() {
                 resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}`}
                 holeKey={holeKey}
                 initialA={hole?.overlay?.A}
+                initialB={hole?.overlay?.B}
                 initialC={hole?.overlay?.C}
                 setupEnabled={setupEnabled}
                 allowPlayB={true}
@@ -1172,7 +1133,9 @@ export default function App() {
                 <div style={{ marginTop: 4 }}>
                   Along:{" "}
                   <b>
-                    {alongFromTeeYards != null ? `${Math.round(alongFromTeeYards)} yd` : "—"}
+                    {alongFromTeeYards != null
+                      ? `${Math.round(alongFromTeeYards)} yd`
+                      : "—"}
                   </b>
                 </div>
 
@@ -1287,7 +1250,7 @@ export default function App() {
                 </div>
 
                 <button
-                  onClick={handleSaveDefaults}
+                  onClick={() => overlayActionsRef.current?.copyOverlayJson?.()}
                   style={{
                     padding: "8px 10px",
                     borderRadius: 10,
@@ -1298,53 +1261,7 @@ export default function App() {
                     pointerEvents: "auto",
                   }}
                 >
-                  Save Defaults
-                </button>
-
-                <button
-                  onClick={handleClearDefaults}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 13,
-                    pointerEvents: "auto",
-                  }}
-                >
-                  Clear Defaults
-                </button>
-
-                <button
-                  onClick={handleClearAllDefaults}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "#ffe8e8",
-                    color: "#900",
-                    fontWeight: 900,
-                    fontSize: 13,
-                    pointerEvents: "auto",
-                  }}
-                >
-                  Clear ALL Defaults
-                </button>
-
-                <button
-                  onClick={handleClearTarget}
-                  style={{
-                    padding: "8px 10px",
-                    borderRadius: 10,
-                    border: "1px solid #333",
-                    background: "white",
-                    fontWeight: 900,
-                    fontSize: 13,
-                    pointerEvents: "auto",
-                  }}
-                >
-                  Clear Target
+                  Copy Overlay
                 </button>
 
                 <button
