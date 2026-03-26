@@ -1,3 +1,4 @@
+// src/components/HoleOverlay.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 function clamp01(n) {
@@ -19,10 +20,6 @@ const ACCURACY_RING_SCALE = 1.25;
 function normPoint(p, fallback) {
   if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
   return { x: clamp01(p.x), y: clamp01(p.y) };
-}
-
-function pxFromNorm(norm, rect) {
-  return { x: norm.x * rect.width, y: norm.y * rect.height };
 }
 
 function distPx(p1, p2) {
@@ -56,6 +53,44 @@ function ringPxFromAccuracy(accuracyMeters) {
   return Math.max(6, scaled);
 }
 
+function computeContainBox(container, natural) {
+  const cw = container?.width || 0;
+  const ch = container?.height || 0;
+  const iw = natural?.width || 0;
+  const ih = natural?.height || 0;
+
+  if (!cw || !ch || !iw || !ih) return null;
+
+  const containerAspect = cw / ch;
+  const imageAspect = iw / ih;
+
+  let width;
+  let height;
+  let left;
+  let top;
+
+  if (imageAspect > containerAspect) {
+    width = cw;
+    height = cw / imageAspect;
+    left = 0;
+    top = (ch - height) / 2;
+  } else {
+    height = ch;
+    width = ch * imageAspect;
+    top = 0;
+    left = (cw - width) / 2;
+  }
+
+  return { left, top, width, height };
+}
+
+function pxFromNormInBox(norm, box) {
+  return {
+    x: box.left + norm.x * box.width,
+    y: box.top + norm.y * box.height,
+  };
+}
+
 export default function HoleOverlay({
   imageSrc,
   resetKey,
@@ -73,7 +108,10 @@ export default function HoleOverlay({
   onActionsReady,
 }) {
   const containerRef = useRef(null);
-  const [rect, setRect] = useState(null);
+  const imgRef = useRef(null);
+
+  const [containerRect, setContainerRect] = useState(null);
+  const [naturalSize, setNaturalSize] = useState(null);
   const lastBTapMsRef = useRef(0);
 
   useEffect(() => {
@@ -82,15 +120,29 @@ export default function HoleOverlay({
 
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      setRect({ width: r.width, height: r.height });
+      setContainerRect({ width: r.width, height: r.height });
     });
 
     ro.observe(el);
     const r0 = el.getBoundingClientRect();
-    setRect({ width: r0.width, height: r0.height });
+    setContainerRect({ width: r0.width, height: r0.height });
 
     return () => ro.disconnect();
   }, []);
+
+  function handleImgLoad() {
+    const img = imgRef.current;
+    if (!img) return;
+    setNaturalSize({
+      width: img.naturalWidth || 0,
+      height: img.naturalHeight || 0,
+    });
+  }
+
+  const imageBox = useMemo(
+    () => computeContainBox(containerRect, naturalSize),
+    [containerRect, naturalSize]
+  );
 
   const fallbackA = useMemo(() => normPoint(initialA, DEFAULT_A), [initialA]);
   const fallbackC = useMemo(() => normPoint(initialC, DEFAULT_C), [initialC]);
@@ -203,12 +255,17 @@ export default function HoleOverlay({
   }
 
   function getNormFromPointer(e) {
-    if (!rect) return null;
+    if (!containerRef.current || !imageBox) return null;
+
     const bounds = containerRef.current.getBoundingClientRect();
-    const px = { x: e.clientX - bounds.left, y: e.clientY - bounds.top };
+    const px = {
+      x: e.clientX - bounds.left,
+      y: e.clientY - bounds.top,
+    };
+
     return {
-      x: clamp01(px.x / rect.width),
-      y: clamp01(px.y / rect.height),
+      x: clamp01((px.x - imageBox.left) / imageBox.width),
+      y: clamp01((px.y - imageBox.top) / imageBox.height),
       px,
     };
   }
@@ -252,6 +309,7 @@ export default function HoleOverlay({
 
   function onLinePointerDown(e) {
     if (!setupEnabled && !allowPlayB) return;
+    if (!imageBox) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -259,10 +317,10 @@ export default function HoleOverlay({
     if (onUserInteract) onUserInteract();
 
     const p = getNormFromPointer(e);
-    if (!p || !rect) return;
+    if (!p) return;
 
-    const Apx = pxFromNorm(A, rect);
-    const Cpx = pxFromNorm(C, rect);
+    const Apx = pxFromNormInBox(A, imageBox);
+    const Cpx = pxFromNormInBox(C, imageBox);
 
     if (
       distPx(p.px, Apx) < BLOCK_B_NEAR_ENDPOINT_PX ||
@@ -272,14 +330,17 @@ export default function HoleOverlay({
     }
 
     const cp = closestPointOnSegment(p.px, Apx, Cpx);
-    setBpos({ x: clamp01(cp.x / rect.width), y: clamp01(cp.y / rect.height) });
+    setBpos({
+      x: clamp01((cp.x - imageBox.left) / imageBox.width),
+      y: clamp01((cp.y - imageBox.top) / imageBox.height),
+    });
     setBactive(true);
     setDragging("B");
   }
 
-  const Apx = rect ? pxFromNorm(A, rect) : { x: 0, y: 0 };
-  const Bpx = rect ? pxFromNorm(Bpos, rect) : { x: 0, y: 0 };
-  const Cpx = rect ? pxFromNorm(C, rect) : { x: 0, y: 0 };
+  const Apx = imageBox ? pxFromNormInBox(A, imageBox) : { x: 0, y: 0 };
+  const Bpx = imageBox ? pxFromNormInBox(Bpos, imageBox) : { x: 0, y: 0 };
+  const Cpx = imageBox ? pxFromNormInBox(C, imageBox) : { x: 0, y: 0 };
 
   const lineClickable = setupEnabled || allowPlayB;
 
@@ -356,8 +417,10 @@ export default function HoleOverlay({
       onPointerLeave={endDrag}
     >
       <img
+        ref={imgRef}
         src={imageSrc}
         alt="Hole"
+        onLoad={handleImgLoad}
         style={{
           width: "100%",
           height: "100%",
@@ -397,12 +460,25 @@ export default function HoleOverlay({
             )}
           </svg>
 
-          {youSmooth && (
+          {youSmooth && imageBox && (
             <div
               style={{
                 position: "absolute",
-                left: `${youSmooth.x * 100}%`,
-                top: `${youSmooth.y * 100}%`,
+                left: Apx.x,
+                top: Apx.y,
+                transform: "translate(-50%, -50%)",
+                opacity: 0,
+                pointerEvents: "none",
+              }}
+            />
+          )}
+
+          {youSmooth && imageBox && (
+            <div
+              style={{
+                position: "absolute",
+                left: imageBox.left + youSmooth.x * imageBox.width,
+                top: imageBox.top + youSmooth.y * imageBox.height,
                 transform: "translate(-50%, -50%)",
                 zIndex: 4,
                 pointerEvents: "none",
@@ -427,7 +503,7 @@ export default function HoleOverlay({
 
           <Marker
             kind="A"
-            norm={A}
+            px={Apx}
             onDown={(e) => onPointerDown("A", e)}
             pointerEnabled={true}
             cursor="grab"
@@ -437,7 +513,7 @@ export default function HoleOverlay({
           {Bactive && (
             <Marker
               kind="B"
-              norm={Bpos}
+              px={Bpx}
               onDown={(e) => onPointerDown("B", e)}
               pointerEnabled={setupEnabled || allowPlayB}
               cursor={setupEnabled || allowPlayB ? "grab" : "default"}
@@ -447,7 +523,7 @@ export default function HoleOverlay({
 
           <Marker
             kind="C"
-            norm={C}
+            px={Cpx}
             onDown={(e) => onPointerDown("C", e)}
             pointerEnabled={true}
             cursor="grab"
@@ -456,7 +532,7 @@ export default function HoleOverlay({
         </>
       )}
 
-      {viewMode === "drive" && youSmooth && rect && (
+      {viewMode === "drive" && youSmooth && imageBox && (
         <svg
           width="100%"
           height="100%"
@@ -470,8 +546,8 @@ export default function HoleOverlay({
           }}
         >
           <line
-            x1={youSmooth.x * rect.width}
-            y1={youSmooth.y * rect.height}
+            x1={imageBox.left + youSmooth.x * imageBox.width}
+            y1={imageBox.top + youSmooth.y * imageBox.height}
             x2={Cpx.x}
             y2={Cpx.y}
             stroke="white"
@@ -489,12 +565,19 @@ export default function HoleOverlay({
         </svg>
       )}
 
-      {youSmooth && <CartIcon norm={youSmooth} />}
+      {youSmooth && imageBox && (
+        <CartIcon
+          px={{
+            x: imageBox.left + youSmooth.x * imageBox.width,
+            y: imageBox.top + youSmooth.y * imageBox.height,
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
+function Marker({ kind, px, onDown, pointerEnabled, cursor, hitSize }) {
   const hs = typeof hitSize === "number" ? hitSize : 44;
   const visibleSize = kind === "A" ? 30 : kind === "B" ? 30 : 18;
   const dotSize = kind === "C" ? 5 : 6;
@@ -504,8 +587,8 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
     <div
       style={{
         position: "absolute",
-        left: `${norm.x * 100}%`,
-        top: `${norm.y * 100}%`,
+        left: px.x,
+        top: px.y,
         transform: "translate(-50%, -50%)",
         width: hs,
         height: hs,
@@ -551,7 +634,7 @@ function Marker({ kind, norm, onDown, pointerEnabled, cursor, hitSize }) {
   );
 }
 
-function CartIcon({ norm }) {
+function CartIcon({ px }) {
   const W = 26;
   const H = 36;
   const x = 12;
@@ -565,8 +648,8 @@ function CartIcon({ norm }) {
     <div
       style={{
         position: "absolute",
-        left: `${norm.x * 100}%`,
-        top: `${norm.y * 100}%`,
+        left: px.x,
+        top: px.y,
         transform: "translate(-50%, -50%)",
         zIndex: 10,
         pointerEvents: "none",
