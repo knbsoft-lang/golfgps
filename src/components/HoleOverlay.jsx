@@ -12,9 +12,9 @@ const DEFAULT_C = { x: 0.5, y: 0.25 };
 const BLOCK_B_NEAR_ENDPOINT_PX = 35;
 const DOUBLE_TAP_MS = 350;
 
-const HIT_A = 46;
-const HIT_B = 54;
-const HIT_C = 46;
+const HIT_A = 70;
+const HIT_B = 80;
+const HIT_C = 70;
 const ACCURACY_RING_SCALE = 1.25;
 
 function normPoint(p, fallback) {
@@ -579,7 +579,7 @@ export default function HoleOverlay({
 
 function Marker({ kind, px, onDown, pointerEnabled, cursor, hitSize }) {
   const hs = typeof hitSize === "number" ? hitSize : 44;
-  const visibleSize = kind === "A" ? 30 : kind === "B" ? 30 : 18;
+  const visibleSize = kind === "A" ? 36 : kind === "B" ? 36 : 22;
   const dotSize = kind === "C" ? 5 : 6;
   const borderRadius = kind === "A" ? 6 : 999;
 
