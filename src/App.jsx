@@ -18,7 +18,7 @@ import {
 } from "./data/overlayExport";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-01";
+const TEST_SYNC_ID = "TEST-03";
 
 // AUTO BUILD ID
 const BUILD_TEST_ID =
@@ -568,18 +568,27 @@ export default function App() {
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
 
+  // GLOBAL SIDEWAYS BOOST
+  // 1.00 = original behavior
+  // 1.40 to 1.60 is a good test range if the cart is on the correct side
+  // but not far enough left/right on the image.
+  const DEFAULT_CROSS_VISUAL_SCALE = 1.5;
+
   const crossCalKey = holeKey ? `golfgps_crossCal_${holeKey}` : "";
-  const [crossCalScale, setCrossCalScale] = useState(1.0);
+  const [crossCalScale, setCrossCalScale] = useState(DEFAULT_CROSS_VISUAL_SCALE);
 
   useEffect(() => {
     if (!crossCalKey) return;
     try {
       const raw = localStorage.getItem(crossCalKey);
       const v = raw != null ? parseFloat(raw) : NaN;
-      if (isFinite(v) && v > 0.01 && v < 10) setCrossCalScale(v);
-      else setCrossCalScale(1.0);
+      if (isFinite(v) && v > 0.01 && v < 10) {
+        setCrossCalScale(v);
+      } else {
+        setCrossCalScale(DEFAULT_CROSS_VISUAL_SCALE);
+      }
     } catch {
-      setCrossCalScale(1.0);
+      setCrossCalScale(DEFAULT_CROSS_VISUAL_SCALE);
     }
   }, [crossCalKey]);
 
