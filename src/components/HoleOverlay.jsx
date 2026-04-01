@@ -113,6 +113,7 @@ export default function HoleOverlay({
   const [containerRect, setContainerRect] = useState(null);
   const [naturalSize, setNaturalSize] = useState(null);
   const lastBTapMsRef = useRef(0);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -180,6 +181,7 @@ export default function HoleOverlay({
     setC(nextC);
     setBactive(true);
     setDragging(null);
+    dragOffsetRef.current = { x: 0, y: 0 };
     lastBTapMsRef.current = 0;
   }, [resetKey, initialA, initialB, initialC]);
 
@@ -223,35 +225,13 @@ export default function HoleOverlay({
 
   function endDrag() {
     setDragging(null);
+    dragOffsetRef.current = { x: 0, y: 0 };
   }
 
   function canDrag(which) {
     if (which === "A" || which === "C") return true;
     if (which === "B") return setupEnabled || allowPlayB;
     return false;
-  }
-
-  function onPointerDown(which, e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (onUserInteract) onUserInteract();
-    if (!canDrag(which)) return;
-
-    if (which === "B") {
-      if (!Bactive) return;
-
-      const now = Date.now();
-      if (now - lastBTapMsRef.current <= DOUBLE_TAP_MS) {
-        lastBTapMsRef.current = 0;
-        setBactive(false);
-        setDragging(null);
-        return;
-      }
-      lastBTapMsRef.current = now;
-    }
-
-    setDragging(which);
   }
 
   function getNormFromPointer(e) {
@@ -270,6 +250,40 @@ export default function HoleOverlay({
     };
   }
 
+  function onPointerDown(which, e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (onUserInteract) onUserInteract();
+    if (!canDrag(which)) return;
+
+    if (which === "B") {
+      if (!Bactive) return;
+
+      const now = Date.now();
+      if (now - lastBTapMsRef.current <= DOUBLE_TAP_MS) {
+        lastBTapMsRef.current = 0;
+        setBactive(false);
+        setDragging(null);
+        dragOffsetRef.current = { x: 0, y: 0 };
+        return;
+      }
+      lastBTapMsRef.current = now;
+    }
+
+    const p = getNormFromPointer(e);
+    if (!p) return;
+
+    const center = which === "A" ? A : which === "B" ? Bpos : C;
+
+    dragOffsetRef.current = {
+      x: p.x - center.x,
+      y: p.y - center.y,
+    };
+
+    setDragging(which);
+  }
+
   function onPointerMove(e) {
     if (!dragging) return;
     const p = getNormFromPointer(e);
@@ -277,20 +291,25 @@ export default function HoleOverlay({
 
     if (onUserInteract) onUserInteract();
 
+    const next = {
+      x: clamp01(p.x - dragOffsetRef.current.x),
+      y: clamp01(p.y - dragOffsetRef.current.y),
+    };
+
     if (dragging === "A") {
-      setA({ x: p.x, y: p.y });
+      setA(next);
       return;
     }
 
     if (dragging === "C") {
-      setC({ x: p.x, y: p.y });
+      setC(next);
       return;
     }
 
     if (dragging === "B") {
       if (!Bactive) return;
       if (!canDrag("B")) return;
-      setBpos({ x: p.x, y: p.y });
+      setBpos(next);
     }
   }
 
@@ -304,6 +323,7 @@ export default function HoleOverlay({
 
     setBpos({ x: p.x, y: p.y });
     setBactive(true);
+    dragOffsetRef.current = { x: 0, y: 0 };
     setDragging("B");
   }
 
@@ -330,11 +350,14 @@ export default function HoleOverlay({
     }
 
     const cp = closestPointOnSegment(p.px, Apx, Cpx);
-    setBpos({
+    const nextB = {
       x: clamp01((cp.x - imageBox.left) / imageBox.width),
       y: clamp01((cp.y - imageBox.top) / imageBox.height),
-    });
+    };
+
+    setBpos(nextB);
     setBactive(true);
+    dragOffsetRef.current = { x: 0, y: 0 };
     setDragging("B");
   }
 
@@ -582,7 +605,7 @@ function Marker({ kind, px, onDown, pointerEnabled, cursor, hitSize }) {
   const visibleSize = kind === "A" ? 36 : kind === "B" ? 36 : 22;
   const dotSize = kind === "C" ? 5 : 6;
   const borderRadius = kind === "A" ? 6 : 999;
-  const boxOffsetY = kind === "A" || kind === "B" ? 18 : 0;
+  const boxOffsetY = kind === "A" || kind === "B" ? 24 : 0;
   const dotOffsetY = 0;
 
   return (
