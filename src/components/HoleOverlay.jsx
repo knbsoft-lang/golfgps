@@ -582,6 +582,8 @@ function Marker({ kind, px, onDown, pointerEnabled, cursor, hitSize }) {
   const visibleSize = kind === "A" ? 36 : kind === "B" ? 36 : 22;
   const dotSize = kind === "C" ? 5 : 6;
   const borderRadius = kind === "A" ? 6 : 999;
+  const boxOffsetY = kind === "A" || kind === "B" ? 18 : 0;
+  const dotOffsetY = 0;
 
   return (
     <div
@@ -604,13 +606,13 @@ function Marker({ kind, px, onDown, pointerEnabled, cursor, hitSize }) {
         style={{
           position: "absolute",
           left: "50%",
-          top: "50%",
+          top: `calc(50% + ${boxOffsetY}px)`,
           transform: "translate(-50%, -50%)",
           width: visibleSize,
           height: visibleSize,
-  	  borderRadius,
-	  border: "2px solid white",
-	  background: "transparent",
+          borderRadius,
+          border: "2px solid white",
+          background: "transparent",
           boxSizing: "border-box",
           pointerEvents: "none",
           opacity: 0.95,
@@ -620,7 +622,7 @@ function Marker({ kind, px, onDown, pointerEnabled, cursor, hitSize }) {
         style={{
           position: "absolute",
           left: "50%",
-          top: "50%",
+          top: `calc(50% + ${dotOffsetY}px)`,
           transform: "translate(-50%, -50%)",
           width: dotSize,
           height: dotSize,
