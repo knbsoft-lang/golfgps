@@ -12,7 +12,7 @@ const DEFAULT_C = { x: 0.5, y: 0.25 };
 const BLOCK_B_NEAR_ENDPOINT_PX = 35;
 const DOUBLE_TAP_MS = 350;
 
-const HIT_A = 70;
+const HIT_A = 110;
 const HIT_B = 80;
 const HIT_C = 70;
 const ACCURACY_RING_SCALE = 1.25;
