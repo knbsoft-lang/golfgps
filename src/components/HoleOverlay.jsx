@@ -603,9 +603,9 @@ export default function HoleOverlay({
 function Marker({ kind, px, onDown, pointerEnabled, cursor, hitSize }) {
   const hs = typeof hitSize === "number" ? hitSize : 44;
   const visibleSize = kind === "A" ? 36 : kind === "B" ? 36 : 22;
-  const dotSize = kind === "C" ? 5 : 6;
+  const dotSize = kind === "A" ? 11 : kind === "C" ? 5 : 6;
   const borderRadius = kind === "A" ? 6 : 999;
-  const boxOffsetY = kind === "A" || kind === "B" ? 24 : 0;
+  const boxOffsetY = kind === "A" ? 24 : kind === "B" ? 0 : 0;
   const dotOffsetY = 0;
 
   return (
