@@ -18,7 +18,7 @@ import {
 } from "./data/overlayExport";
 
 const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-01";
+const TEST_SYNC_ID = "TEST-88";
 
 // AUTO BUILD ID
 const BUILD_TEST_ID =
