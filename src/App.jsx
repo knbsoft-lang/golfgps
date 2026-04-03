@@ -17,7 +17,7 @@ import {
   saveOverlayForHole,
 } from "./data/overlayExport";
 
-const TEST_SYNC_ID = "TEST-A0C0-11";
+const TEST_SYNC_ID = "TEST-A0C0-01";
 
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";

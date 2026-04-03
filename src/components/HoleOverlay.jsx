@@ -367,7 +367,7 @@ export default function HoleOverlay({
               y1={displayCartPx.y}
               x2={C0px.x}
               y2={C0px.y}
-              stroke="white"
+              stroke="lime"
               strokeWidth="3"
               strokeLinecap="round"
             />
@@ -576,9 +576,21 @@ function GreenMarker({ px }) {
           width: 20,
           height: 20,
           borderRadius: 999,
-          border: "3px solid white",
+          border: "3px solid lime",
           boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
-          background: "rgba(255,255,255,0.05)",
+          background: "rgba(0,255,0,0.06)",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 6,
+          height: 6,
+          borderRadius: 999,
+          background: "lime",
         }}
       />
     </div>
@@ -603,8 +615,8 @@ function TargetMarker({ px, onDown }) {
           width: 34,
           height: 34,
           borderRadius: 999,
-          border: "3px solid white",
-          background: "rgba(255,255,255,0.04)",
+          border: "3px solid lime",
+          background: "rgba(0,255,0,0.04)",
           boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
         }}
       />
@@ -617,7 +629,7 @@ function TargetMarker({ px, onDown }) {
           height: 8,
           transform: "translate(-50%, -50%)",
           borderRadius: 999,
-          background: "white",
+          background: "lime",
         }}
       />
     </div>
@@ -691,8 +703,8 @@ function CartIcon({ px }) {
           height={H}
           rx={4}
           ry={4}
-          fill="rgba(0,170,255,0.12)"
-          stroke="white"
+          fill="rgba(0,255,0,0.10)"
+          stroke="lime"
           strokeWidth={whiteStroke}
         />
 
@@ -701,7 +713,7 @@ function CartIcon({ px }) {
           y1={y + 6}
           x2={x + wheelInset}
           y2={y + 6 + wheelLen}
-          stroke="white"
+          stroke="lime"
           strokeWidth={2.4}
           strokeLinecap="round"
         />
@@ -710,7 +722,7 @@ function CartIcon({ px }) {
           y1={y + H - 6 - wheelLen}
           x2={x + wheelInset}
           y2={y + H - 6}
-          stroke="white"
+          stroke="lime"
           strokeWidth={2.4}
           strokeLinecap="round"
         />
@@ -720,7 +732,7 @@ function CartIcon({ px }) {
           y1={y + 6}
           x2={x + W - wheelInset}
           y2={y + 6 + wheelLen}
-          stroke="white"
+          stroke="lime"
           strokeWidth={2.4}
           strokeLinecap="round"
         />
@@ -729,12 +741,12 @@ function CartIcon({ px }) {
           y1={y + H - 6 - wheelLen}
           x2={x + W - wheelInset}
           y2={y + H - 6}
-          stroke="white"
+          stroke="lime"
           strokeWidth={2.4}
           strokeLinecap="round"
         />
 
-        <circle cx={x + W / 2} cy={y + H / 2} r={3} fill="white" />
+        <circle cx={x + W / 2} cy={y + H / 2} r={3} fill="lime" />
       </svg>
     </div>
   );
