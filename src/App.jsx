@@ -17,7 +17,7 @@ import {
   saveOverlayForHole,
 } from "./data/overlayExport";
 
-const TEST_SYNC_ID = "TEST-A0C0-01";
+const TEST_SYNC_ID = "TEST-A0C0-11";
 
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
@@ -465,7 +465,7 @@ export default function App() {
     return roundYards(metersToYards(haversineMeters(teeLL, greenLL)));
   }, [teeLL, greenLL]);
 
-  const youToGreenYards = useMemo(() => {
+  const liveYouToGreenYards = useMemo(() => {
     if (!greenLL || !pos) return null;
     return roundYards(metersToYards(haversineMeters(pos, greenLL)));
   }, [pos, greenLL]);
@@ -712,15 +712,75 @@ export default function App() {
       ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000))
       : null;
 
+  const [planningMode, setPlanningMode] = useState(false);
+  const [planningCartNorm, setPlanningCartNorm] = useState(null);
+  const [targetNorm, setTargetNorm] = useState(null);
+  const planningStartLivePosRef = useRef(null);
+
+  function enterPlanning(nextTargetNorm) {
+    if (!liveCartNorm) return;
+    setPlanningMode(true);
+    setPlanningCartNorm(liveCartNorm);
+    setTargetNorm(nextTargetNorm || null);
+    planningStartLivePosRef.current = pos ? { lat: pos.lat, lon: pos.lon } : null;
+  }
+
+  function cancelPlanning() {
+    setPlanningMode(false);
+    setPlanningCartNorm(null);
+    setTargetNorm(null);
+    planningStartLivePosRef.current = null;
+  }
+
+  useEffect(() => {
+    if (!planningMode) return;
+    if (!planningStartLivePosRef.current || !pos) return;
+
+    const movedYards = metersToYards(
+      haversineMeters(planningStartLivePosRef.current, pos)
+    );
+
+    if (movedYards >= 5) {
+      cancelPlanning();
+    }
+  }, [planningMode, pos]);
+
+  const targetVisible = useMemo(() => {
+    if (!planningMode || !planningCartNorm || !targetNorm) return false;
+    if (!targetSuppressRadiusNorm || targetSuppressRadiusNorm <= 0) return true;
+    return distNorm(planningCartNorm, targetNorm) > targetSuppressRadiusNorm;
+  }, [planningMode, planningCartNorm, targetNorm, targetSuppressRadiusNorm]);
+
+  const planningCartToTargetYards = useMemo(() => {
+    if (!planningMode || !planningCartNorm || !targetNorm || !yardsPerNormUnit) return null;
+    if (!targetVisible) return null;
+    return roundYards(distNorm(planningCartNorm, targetNorm) * yardsPerNormUnit);
+  }, [planningMode, planningCartNorm, targetNorm, yardsPerNormUnit, targetVisible]);
+
+  const targetToGreenYards = useMemo(() => {
+    if (!planningMode || !targetNorm || !codeC0 || !yardsPerNormUnit) return null;
+    if (!targetVisible) return null;
+    return roundYards(distNorm(targetNorm, codeC0) * yardsPerNormUnit);
+  }, [planningMode, targetNorm, codeC0, yardsPerNormUnit, targetVisible]);
+
+  const planningCenterYards = useMemo(() => {
+    if (!planningMode || !planningCartNorm || !codeC0 || !yardsPerNormUnit) return null;
+    return roundYards(distNorm(planningCartNorm, codeC0) * yardsPerNormUnit);
+  }, [planningMode, planningCartNorm, codeC0, yardsPerNormUnit]);
+
+  const displayCenterYards =
+    planningMode && planningCenterYards != null ? planningCenterYards : liveYouToGreenYards;
+
   const greenDepth = typeof hole?.greenDepth === "number" ? hole.greenDepth : null;
-  const greenCenterYards = youToGreenYards;
+
   const greenBackYards =
-    typeof youToGreenYards === "number" && typeof greenDepth === "number"
-      ? roundYards(youToGreenYards + greenDepth / 2)
+    typeof displayCenterYards === "number" && typeof greenDepth === "number"
+      ? roundYards(displayCenterYards + greenDepth / 2)
       : null;
+
   const greenFrontYards =
-    typeof youToGreenYards === "number" && typeof greenDepth === "number"
-      ? roundYards(Math.max(0, youToGreenYards - greenDepth / 2))
+    typeof displayCenterYards === "number" && typeof greenDepth === "number"
+      ? roundYards(Math.max(0, displayCenterYards - greenDepth / 2))
       : null;
 
   const overlayStoreRevRef = useRef(0);
@@ -833,57 +893,6 @@ export default function App() {
     const json = JSON.stringify(store, null, 2);
     window.prompt("Current saved A0/C0 store:", json);
   }
-
-  const [planningMode, setPlanningMode] = useState(false);
-  const [planningCartNorm, setPlanningCartNorm] = useState(null);
-  const [targetNorm, setTargetNorm] = useState(null);
-  const planningStartLivePosRef = useRef(null);
-
-  function enterPlanning(nextTargetNorm) {
-    if (!liveCartNorm) return;
-    setPlanningMode(true);
-    setPlanningCartNorm(liveCartNorm);
-    setTargetNorm(nextTargetNorm || null);
-    planningStartLivePosRef.current = pos ? { lat: pos.lat, lon: pos.lon } : null;
-  }
-
-  function cancelPlanning() {
-    setPlanningMode(false);
-    setPlanningCartNorm(null);
-    setTargetNorm(null);
-    planningStartLivePosRef.current = null;
-  }
-
-  useEffect(() => {
-    if (!planningMode) return;
-    if (!planningStartLivePosRef.current || !pos) return;
-
-    const movedYards = metersToYards(
-      haversineMeters(planningStartLivePosRef.current, pos)
-    );
-
-    if (movedYards >= 5) {
-      cancelPlanning();
-    }
-  }, [planningMode, pos]);
-
-  const targetVisible = useMemo(() => {
-    if (!planningMode || !planningCartNorm || !targetNorm) return false;
-    if (!targetSuppressRadiusNorm || targetSuppressRadiusNorm <= 0) return true;
-    return distNorm(planningCartNorm, targetNorm) > targetSuppressRadiusNorm;
-  }, [planningMode, planningCartNorm, targetNorm, targetSuppressRadiusNorm]);
-
-  const planningCartToTargetYards = useMemo(() => {
-    if (!planningMode || !planningCartNorm || !targetNorm || !yardsPerNormUnit) return null;
-    if (!targetVisible) return null;
-    return roundYards(distNorm(planningCartNorm, targetNorm) * yardsPerNormUnit);
-  }, [planningMode, planningCartNorm, targetNorm, yardsPerNormUnit, targetVisible]);
-
-  const targetToGreenYards = useMemo(() => {
-    if (!planningMode || !targetNorm || !codeC0 || !yardsPerNormUnit) return null;
-    if (!targetVisible) return null;
-    return roundYards(distNorm(targetNorm, codeC0) * yardsPerNormUnit);
-  }, [planningMode, targetNorm, codeC0, yardsPerNormUnit, targetVisible]);
 
   return (
     <div
@@ -1076,7 +1085,7 @@ export default function App() {
                   lineHeight: 0.95,
                 }}
               >
-                {greenCenterYards ?? "—"}
+                {displayCenterYards ?? "—"}
               </div>
 
               <div style={{ fontSize: 16, marginBottom: 0 }}>Front</div>
@@ -1411,7 +1420,7 @@ export default function App() {
                 }}
               >
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
-                  You→Green {youToGreenYards ?? "—"} yd
+                  You→Green {displayCenterYards ?? "—"} yd
                 </div>
                 <div style={{ fontSize: 17, fontWeight: 900, opacity: 0.95 }}>
                   {parText} • {siText}
