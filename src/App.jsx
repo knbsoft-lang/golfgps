@@ -17,15 +17,12 @@ import {
   saveOverlayForHole,
 } from "./data/overlayExport";
 
-const TEE_BOXES = ["Black", "Gold", "Blue", "White", "Green", "Red", "Friendly"];
-const TEST_SYNC_ID = "TEST-02";
+const TEST_SYNC_ID = "TEST-A0C0-01";
 
-// AUTO BUILD ID
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
 
-// Session persistence
-const SESSION_KEY = "golfgps_lastSession_v1";
+const SESSION_KEY = "golfgps_lastSession_a0c0_v1";
 const FRESH_ON_NEXT_OPEN_KEY = "golfgps_freshOnNextOpen_v1";
 
 function defaultParForHole(holeNumber) {
@@ -39,7 +36,7 @@ function clamp(n, a, b) {
 }
 
 function clamp01(n) {
-  return Math.max(0, Math.min(1, n));
+  return Math.max(0, Math.min(1, Number(n) || 0));
 }
 
 function distNorm(p1, p2) {
@@ -215,24 +212,6 @@ function SelectBox({ value, onChange, placeholder, options, disabled = false }) 
   );
 }
 
-function tgOverrideKey(clubKey, nineName, holeNum, teeBox) {
-  const ck = (clubKey || "").replace(/\s+/g, "");
-  const nk = (nineName || "").replace(/\s+/g, "");
-  const hb = String(holeNum ?? "").padStart(2, "0");
-  const tb = (teeBox || "Unknown").replace(/\s+/g, "");
-  return `golfgps_tgOverride_${ck}-${nk}-${hb}-${tb}`;
-}
-
-function loadTGOverride(clubKey, nineName, holeNum, teeBox) {
-  try {
-    const key = tgOverrideKey(clubKey, nineName, holeNum, teeBox);
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function styleSetupBtn(background = "white") {
   return {
     padding: "8px 10px",
@@ -252,7 +231,6 @@ export default function App() {
 
   const [courseType, setCourseType] = useState("");
   const [clubKey, setClubKey] = useState("");
-  const [teeBox, setTeeBox] = useState("");
 
   const filteredClubKeys = useMemo(() => {
     if (!courseType) return [];
@@ -283,6 +261,7 @@ export default function App() {
         localStorage.removeItem(SESSION_KEY);
         return;
       }
+
       const raw = localStorage.getItem(SESSION_KEY);
       if (!raw) return;
       const s = JSON.parse(raw);
@@ -293,7 +272,6 @@ export default function App() {
       setMode(s.mode || "");
       setNineA(s.nineA || "");
       setNineB(s.nineB || "");
-      setTeeBox(s.teeBox || "");
       setStartHoleDisplay(String(s.startHoleDisplay || "1"));
 
       pendingRestoreRef.current = {
@@ -311,7 +289,6 @@ export default function App() {
     setMode("");
     setNineA("");
     setNineB("");
-    setTeeBox("");
     setPage("home");
   }, [courseType]);
 
@@ -319,7 +296,6 @@ export default function App() {
     setMode("");
     setNineA("");
     setNineB("");
-    setTeeBox("");
     setPage("home");
 
     if (!clubKey) return;
@@ -332,7 +308,6 @@ export default function App() {
       setMode("9");
       setNineA(nn[0] || "");
       setNineB(nn[0] || "");
-      return;
     }
   }, [clubKey, courseType]);
 
@@ -370,10 +345,7 @@ export default function App() {
   useEffect(() => setIdx(0), [courseType, clubKey, mode, nineA, nineB]);
 
   const [startHoleDisplay, setStartHoleDisplay] = useState("1");
-  useEffect(
-    () => setStartHoleDisplay("1"),
-    [courseType, clubKey, mode, nineA, nineB]
-  );
+  useEffect(() => setStartHoleDisplay("1"), [courseType, clubKey, mode, nineA, nineB]);
 
   useEffect(() => {
     const p = pendingRestoreRef.current;
@@ -404,7 +376,6 @@ export default function App() {
           mode,
           nineA,
           nineB,
-          teeBox,
           startHoleDisplay,
           desiredDisplayHole,
           t: Date.now(),
@@ -414,10 +385,11 @@ export default function App() {
         // ignore
       }
     }, 250);
+
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [page, courseType, clubKey, mode, nineA, nineB, teeBox, startHoleDisplay, idx, hole]);
+  }, [page, courseType, clubKey, mode, nineA, nineB, startHoleDisplay, hole]);
 
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
@@ -472,8 +444,7 @@ export default function App() {
     }, 1000);
 
     return () => {
-      if (watchIdRef.current)
-        navigator.geolocation.clearWatch(watchIdRef.current);
+      if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, []);
@@ -483,18 +454,11 @@ export default function App() {
   const nextHole = () =>
     setIdx((v) => clamp(v + 1, 0, Math.max(0, roundHoles.length - 1)));
 
-  const [tgRev] = useState(0);
-
   const holeNum = hole?.hole ?? null;
   const holeNine = hole?.nine ?? null;
 
-  const tgOverride = useMemo(() => {
-    if (!clubKey || !holeNine || !holeNum || !teeBox) return null;
-    return loadTGOverride(clubKey, holeNine, holeNum, teeBox);
-  }, [clubKey, holeNine, holeNum, teeBox, tgRev]);
-
-  const teeLL = tgOverride?.tee ?? hole?.tee ?? null;
-  const greenLL = tgOverride?.green ?? hole?.green ?? null;
+  const teeLL = hole?.tee ?? null;
+  const greenLL = hole?.green ?? null;
 
   const teeToGreenYards = useMemo(() => {
     if (!teeLL || !greenLL) return null;
@@ -506,13 +470,6 @@ export default function App() {
     return roundYards(metersToYards(haversineMeters(pos, greenLL)));
   }, [pos, greenLL]);
 
-  const youToHoleYards = useMemo(() => {
-    if (!teeLL || !greenLL || !pos) return null;
-    const ydT = roundYards(metersToYards(haversineMeters(pos, teeLL)));
-    const ydG = roundYards(metersToYards(haversineMeters(pos, greenLL)));
-    return Math.min(ydT, ydG);
-  }, [pos, teeLL, greenLL]);
-
   const parValue =
     typeof hole?.par === "number"
       ? hole.par
@@ -523,11 +480,15 @@ export default function App() {
   const parText = `Par ${parValue}`;
   const siText = `SI ${siValue ?? "—"}`;
 
-  const [liveOverlay, setLiveOverlay] = useState(null);
+  const [builderOverlay, setBuilderOverlay] = useState(null);
   const [overlayResetNonce, setOverlayResetNonce] = useState(0);
   useEffect(() => {
-    setLiveOverlay(null);
+    setBuilderOverlay(null);
     setOverlayResetNonce(0);
+    setPlanningMode(false);
+    setPlanningCartNorm(null);
+    setTargetNorm(null);
+    planningStartLivePosRef.current = null;
   }, [holeKey]);
 
   const overlayActionsRef = useRef(null);
@@ -538,29 +499,34 @@ export default function App() {
     return getSavedOverlayForHole(clubKey, holeNine, holeNum);
   }, [clubKey, holeNine, holeNum, overlayResetNonce]);
 
-  const codeA = useMemo(
-    () => normPoint(savedOverlayForHole?.A ?? hole?.overlay?.A, { x: 0.5, y: 0.75 }),
-    [savedOverlayForHole?.A, hole?.overlay?.A]
-  );
-  const codeB = useMemo(
-    () => normPoint(savedOverlayForHole?.B ?? hole?.overlay?.B, { x: 0.5, y: 0.5 }),
-    [savedOverlayForHole?.B, hole?.overlay?.B]
-  );
-  const codeC = useMemo(
-    () => normPoint(savedOverlayForHole?.C ?? hole?.overlay?.C, { x: 0.5, y: 0.25 }),
-    [savedOverlayForHole?.C, hole?.overlay?.C]
+  const codeA0 = useMemo(
+    () =>
+      normPoint(
+        builderOverlay?.A0 ??
+          savedOverlayForHole?.A0 ??
+          hole?.overlay?.A0 ??
+          hole?.overlay?.A,
+        { x: 0.5, y: 0.75 }
+      ),
+    [builderOverlay?.A0, savedOverlayForHole?.A0, hole?.overlay?.A0, hole?.overlay?.A]
   );
 
-  const A = liveOverlay?.A || codeA;
-  const Bactive = liveOverlay?.Bactive ?? true;
-  const B = liveOverlay?.B || codeB;
-  const C = liveOverlay?.C || codeC;
+  const codeC0 = useMemo(
+    () =>
+      normPoint(
+        builderOverlay?.C0 ??
+          savedOverlayForHole?.C0 ??
+          hole?.overlay?.C0 ??
+          hole?.overlay?.C,
+        { x: 0.5, y: 0.1 }
+      ),
+    [builderOverlay?.C0, savedOverlayForHole?.C0, hole?.overlay?.C0, hole?.overlay?.C]
+  );
 
-    const baselineLen = useMemo(() => {
-    if (!A || !C) return null;
-    const d = distNorm(A, C);
+  const baselineLen = useMemo(() => {
+    const d = distNorm(codeA0, codeC0);
     return d > 0.0001 ? d : null;
-  }, [A, C]);
+  }, [codeA0, codeC0]);
 
   const yardsPerNormUnit = useMemo(() => {
     if (typeof teeToGreenYards !== "number") return null;
@@ -568,27 +534,7 @@ export default function App() {
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
 
-  // ONE global sideways scale for every hole.
-  // Increase this if the cart is on the correct side
-  // but still not far enough left/right on the image.
   const crossCalScale = 1.6;
-
- 
-
-  const teeToTargetYards = useMemo(() => {
-    if (!yardsPerNormUnit) return null;
-    if (!A || !B || !Bactive) return null;
-    return roundYards(distNorm(A, B) * yardsPerNormUnit);
-  }, [yardsPerNormUnit, A, B, Bactive]);
-
-  const targetToGreenYards = useMemo(() => {
-    if (!yardsPerNormUnit) return null;
-    if (!B || !C || !Bactive) return null;
-    return roundYards(distNorm(B, C) * yardsPerNormUnit);
-  }, [yardsPerNormUnit, B, C, Bactive]);
-
-  const YOU_SHOW_WITHIN_YARDS = 1200;
-  const crossOffsetOn = true;
 
   const crossRawYardsSigned = useMemo(() => {
     if (!teeLL || !greenLL || !pos) return null;
@@ -606,7 +552,7 @@ export default function App() {
     const v = Math.round(crossRawYardsSigned * crossCalScale);
     if (Math.abs(v) <= 1) return 0;
     return v;
-  }, [crossRawYardsSigned, crossCalScale]);
+  }, [crossRawYardsSigned]);
 
   const crossText = useMemo(() => {
     if (crossScaledYardsSigned == null) return "—";
@@ -625,42 +571,31 @@ export default function App() {
   }, [crossRawYardsSigned]);
 
   const basePointAndPerp = useMemo(() => {
-    if (!teeLL || !greenLL || !pos || !A || !C) return null;
+    if (!teeLL || !greenLL || !pos || !codeA0 || !codeC0) return null;
 
     const t = projectAlongTeeGreen(teeLL, greenLL, pos);
     if (typeof t !== "number") return null;
 
     const base = {
-      x: A.x + (C.x - A.x) * t,
-      y: A.y + (C.y - A.y) * t,
+      x: codeA0.x + (codeC0.x - codeA0.x) * t,
+      y: codeA0.y + (codeC0.y - codeA0.y) * t,
     };
 
-    const dx = C.x - A.x;
-    const dy = C.y - A.y;
+    const dx = codeC0.x - codeA0.x;
+    const dy = codeC0.y - codeA0.y;
     const len = Math.hypot(dx, dy);
-    if (!isFinite(len) || len < 0.0001)
+    if (!isFinite(len) || len < 0.0001) {
       return { base, perpRight: { x: 0, y: 0 }, t };
-
-    const perpRight = { x: -dy / len, y: dx / len };
-
-    return { base, perpRight, t };
-  }, [teeLL, greenLL, pos, A, C]);
-
-  const youNormRaw = useMemo(() => {
-    if (!teeLL || !greenLL || !pos || !A || !C) return null;
-
-    if (
-      typeof youToHoleYards === "number" &&
-      youToHoleYards > YOU_SHOW_WITHIN_YARDS
-    ) {
-      return null;
     }
 
-    if (!basePointAndPerp) return null;
+    const perpRight = { x: -dy / len, y: dx / len };
+    return { base, perpRight, t };
+  }, [teeLL, greenLL, pos, codeA0, codeC0]);
 
+  const youNormRaw = useMemo(() => {
+    if (!basePointAndPerp) return null;
     const { base, perpRight } = basePointAndPerp;
 
-    if (!crossOffsetOn) return base;
     if (!yardsPerNormUnit) return base;
     if (typeof crossScaledYardsSigned !== "number") return base;
 
@@ -671,18 +606,7 @@ export default function App() {
       x: clamp01(base.x + perpRight.x * offsetNorm),
       y: clamp01(base.y + perpRight.y * offsetNorm),
     };
-  }, [
-    teeLL,
-    greenLL,
-    pos,
-    A,
-    C,
-    youToHoleYards,
-    basePointAndPerp,
-    crossOffsetOn,
-    yardsPerNormUnit,
-    crossScaledYardsSigned,
-  ]);
+  }, [basePointAndPerp, yardsPerNormUnit, crossScaledYardsSigned]);
 
   const trustLevel = useMemo(() => {
     const a = pos?.accuracyMeters;
@@ -694,7 +618,7 @@ export default function App() {
 
   const trustIsLow = trustLevel === "LOW";
 
-  const youNorm =
+  const liveCartNorm =
     !trustIsLow && youNormRaw && isFinite(youNormRaw.x) && isFinite(youNormRaw.y)
       ? youNormRaw
       : null;
@@ -712,8 +636,8 @@ export default function App() {
   const TOP_BTN_H = 44;
 
   const ARROW_LEFT = 80;
-  const ARROW_TOP_BC = 240;
-  const ARROW_TOP_AB = 640;
+  const ARROW_TOP_TARGET_GREEN = 240;
+  const ARROW_TOP_CART_TARGET = 640;
 
   const holeNumberText =
     hole?.displayHole != null
@@ -723,16 +647,12 @@ export default function App() {
   const roundReady = useMemo(() => {
     if (!courseType) return false;
     if (!clubKey) return false;
-    if (!teeBox) return false;
-
     if (courseType === "Executive") return true;
-
     if (!mode) return false;
     if (!nineA) return false;
     if (mode === "18" && !nineB) return false;
-
     return true;
-  }, [courseType, clubKey, teeBox, mode, nineA, nineB]);
+  }, [courseType, clubKey, mode, nineA, nineB]);
 
   function enterSetup() {
     if (setupEnabled) return;
@@ -772,7 +692,6 @@ export default function App() {
     setMode("");
     setNineA("");
     setNineB("");
-    setTeeBox("");
     setStartHoleDisplay("1");
     setIdx(0);
 
@@ -786,66 +705,7 @@ export default function App() {
       ? Math.max(0, Math.round((Date.now() - lastFixMs) / 1000))
       : null;
 
-  const [viewMode, setViewMode] = useState("aim");
-  const [teeDepartureReached, setTeeDepartureReached] = useState(false);
-  const lastInteractMsRef = useRef(Date.now());
-  const idleTimerRef = useRef(null);
-
-  function markUserInteraction() {
-    lastInteractMsRef.current = Date.now();
-    setViewMode("aim");
-
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-
-    if (!teeDepartureReached) return;
-
-    idleTimerRef.current = setTimeout(() => {
-      setViewMode("drive");
-    }, 15000);
-  }
-
-  useEffect(() => {
-    if (page !== "play") return;
-
-    setViewMode("aim");
-    setTeeDepartureReached(false);
-    lastInteractMsRef.current = Date.now();
-
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    };
-  }, [page, holeKey]);
-
-  useEffect(() => {
-    if (page !== "play") return;
-    if (teeDepartureReached) return;
-    if (trustIsLow) return;
-    if (alongFromTeeYards == null) return;
-    if (alongFromTeeYards < 100) return;
-
-    setTeeDepartureReached(true);
-
-    if (idleTimerRef.current) {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = null;
-    }
-
-    idleTimerRef.current = setTimeout(() => {
-      setViewMode("drive");
-    }, 15000);
-  }, [page, alongFromTeeYards, trustIsLow, teeDepartureReached]);
-
   const greenDepth = typeof hole?.greenDepth === "number" ? hole.greenDepth : null;
-
   const greenCenterYards = youToGreenYards;
   const greenBackYards =
     typeof youToGreenYards === "number" && typeof greenDepth === "number"
@@ -874,7 +734,7 @@ export default function App() {
     return getSavedCountForCourse(clubKey);
   }, [clubKey, overlayStoreRevRef.current]);
 
-  function handleSaveABC() {
+  function handleSaveA0C0() {
     if (!clubKey || !holeNine || !holeNum) {
       window.alert("No current hole to save.");
       return;
@@ -882,41 +742,37 @@ export default function App() {
 
     const state = overlayActionsRef.current?.getState?.();
     if (!state) {
-      window.alert("Overlay state not ready yet.");
+      window.alert("A0/C0 state not ready yet.");
       return;
     }
 
     const saved = saveOverlayForHole(clubKey, holeNine, holeNum, state);
     if (!saved) {
-      window.alert("Save ABC failed.");
+      window.alert("Save A0/C0 failed.");
       return;
     }
 
     bumpOverlayStoreRev();
-    window.alert(
-      `Saved ABC\n\n${clubKey}\n${holeNine} - Hole ${holeNum}`
-    );
+    window.alert(`Saved A0/C0\n\n${clubKey}\n${holeNine} - Hole ${holeNum}`);
   }
 
-  function handleClearABC() {
+  function handleClearA0C0() {
     if (!clubKey || !holeNine || !holeNum) {
       window.alert("No current hole to clear.");
       return;
     }
 
     const ok = window.confirm(
-      `Clear saved ABC for:\n\n${clubKey}\n${holeNine} - Hole ${holeNum}\n\nThis only removes the builder-saved overlay for this hole.`
+      `Clear saved A0/C0 for:\n\n${clubKey}\n${holeNine} - Hole ${holeNum}\n\nThis only removes the builder-saved A0/C0 for this hole.`
     );
     if (!ok) return;
 
     clearOverlayForHole(clubKey, holeNine, holeNum);
-    setLiveOverlay(null);
+    setBuilderOverlay(null);
     setOverlayResetNonce((n) => n + 1);
     bumpOverlayStoreRev();
 
-    window.alert(
-      `Cleared saved ABC\n\n${clubKey}\n${holeNine} - Hole ${holeNum}`
-    );
+    window.alert(`Cleared saved A0/C0\n\n${clubKey}\n${holeNine} - Hole ${holeNum}`);
   }
 
   function handleExportCurrentNine() {
@@ -931,18 +787,14 @@ export default function App() {
       return;
     }
 
-    const ok = downloadOverlayJson(
-      data,
-      makeNineExportFileName(clubKey, holeNine)
-    );
-
+    const ok = downloadOverlayJson(data, makeNineExportFileName(clubKey, holeNine));
     if (!ok) {
       window.alert("Export failed.");
       return;
     }
 
     window.alert(
-      `Exported Current Nine\n\n${clubKey}\n${holeNine}\n\nSaved holes: ${savedCountNine}`
+      `Exported Current Nine A0/C0\n\n${clubKey}\n${holeNine}\n\nSaved holes: ${savedCountNine}`
     );
   }
 
@@ -965,15 +817,58 @@ export default function App() {
     }
 
     window.alert(
-      `Exported Current Course\n\n${clubKey}\n\nSaved holes: ${savedCountCourse}`
+      `Exported Current Course A0/C0\n\n${clubKey}\n\nSaved holes: ${savedCountCourse}`
     );
   }
 
   function handleShowSavedStore() {
     const store = getOverlayExportStore();
     const json = JSON.stringify(store, null, 2);
-    window.prompt("Current saved overlay store:", json);
+    window.prompt("Current saved A0/C0 store:", json);
   }
+
+  const [planningMode, setPlanningMode] = useState(false);
+  const [planningCartNorm, setPlanningCartNorm] = useState(null);
+  const [targetNorm, setTargetNorm] = useState(null);
+  const planningStartLivePosRef = useRef(null);
+
+  function enterPlanning(nextTargetNorm) {
+    if (!liveCartNorm) return;
+    setPlanningMode(true);
+    setPlanningCartNorm(liveCartNorm);
+    setTargetNorm(nextTargetNorm || liveCartNorm);
+    planningStartLivePosRef.current = pos ? { lat: pos.lat, lon: pos.lon } : null;
+  }
+
+  function cancelPlanning() {
+    setPlanningMode(false);
+    setPlanningCartNorm(null);
+    setTargetNorm(null);
+    planningStartLivePosRef.current = null;
+  }
+
+  useEffect(() => {
+    if (!planningMode) return;
+    if (!planningStartLivePosRef.current || !pos) return;
+
+    const movedYards = metersToYards(
+      haversineMeters(planningStartLivePosRef.current, pos)
+    );
+
+    if (movedYards >= 5) {
+      cancelPlanning();
+    }
+  }, [planningMode, pos]);
+
+  const planningCartToTargetYards = useMemo(() => {
+    if (!planningMode || !planningCartNorm || !targetNorm || !yardsPerNormUnit) return null;
+    return roundYards(distNorm(planningCartNorm, targetNorm) * yardsPerNormUnit);
+  }, [planningMode, planningCartNorm, targetNorm, yardsPerNormUnit]);
+
+  const targetToGreenYards = useMemo(() => {
+    if (!planningMode || !targetNorm || !codeC0 || !yardsPerNormUnit) return null;
+    return roundYards(distNorm(targetNorm, codeC0) * yardsPerNormUnit);
+  }, [planningMode, targetNorm, codeC0, yardsPerNormUnit]);
 
   return (
     <div
@@ -1019,15 +914,6 @@ export default function App() {
                 />
               )}
 
-              {courseType === "Executive" && clubKey && (
-                <SelectBox
-                  value={teeBox}
-                  onChange={setTeeBox}
-                  placeholder="Tee Box"
-                  options={TEE_BOXES}
-                />
-              )}
-
               {courseType === "Championship" && clubKey && (
                 <>
                   <SelectBox
@@ -1055,16 +941,6 @@ export default function App() {
                       onChange={setNineB}
                       placeholder="Second 9 holes"
                       options={nineNames.filter((n) => n !== nineA)}
-                    />
-                  )}
-
-                  {((mode === "9" && nineA) ||
-                    (mode === "18" && nineA && nineB)) && (
-                    <SelectBox
-                      value={teeBox}
-                      onChange={setTeeBox}
-                      placeholder="Tee Box"
-                      options={TEE_BOXES}
                     />
                   )}
                 </>
@@ -1098,9 +974,7 @@ export default function App() {
                 opacity: 0.95,
               }}
             >
-              <div style={{ fontWeight: 900, marginBottom: 6 }}>
-                {gpsStatus}
-              </div>
+              <div style={{ fontWeight: 900, marginBottom: 6 }}>{gpsStatus}</div>
               <div style={{ opacity: 0.9 }}>
                 Tip: GPS lock may take 10–30 seconds after Airplane Mode.
               </div>
@@ -1140,17 +1014,17 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {viewMode === "aim" && Bactive && (
+            {planningMode && (
               <>
                 <ArrowYardBox
                   left={ARROW_LEFT}
-                  top={ARROW_TOP_BC}
+                  top={ARROW_TOP_TARGET_GREEN}
                   yards={targetToGreenYards}
                 />
                 <ArrowYardBox
                   left={ARROW_LEFT}
-                  top={ARROW_TOP_AB}
-                  yards={teeToTargetYards}
+                  top={ARROW_TOP_CART_TARGET}
+                  yards={planningCartToTargetYards}
                 />
               </>
             )}
@@ -1199,16 +1073,19 @@ export default function App() {
                 imageSrc={imgSrc}
                 resetKey={`${clubKey}-${hole?.nine}-${hole?.hole}-${hole?.displayHole}-${overlayResetNonce}`}
                 holeKey={holeKey}
-                initialA={savedOverlayForHole?.A ?? hole?.overlay?.A}
-                initialB={savedOverlayForHole?.B ?? hole?.overlay?.B}
-                initialC={savedOverlayForHole?.C ?? hole?.overlay?.C}
+                initialA0={savedOverlayForHole?.A0 ?? hole?.overlay?.A0 ?? hole?.overlay?.A}
+                initialC0={savedOverlayForHole?.C0 ?? hole?.overlay?.C0 ?? hole?.overlay?.C}
                 setupEnabled={setupEnabled}
-                allowPlayB={true}
-                youNorm={youNorm}
+                liveCartNorm={liveCartNorm}
+                planningMode={planningMode}
+                planningCartNorm={planningCartNorm}
+                targetNorm={targetNorm}
                 youAccuracyMeters={pos?.accuracyMeters ?? null}
-                viewMode={viewMode}
-                onUserInteract={markUserInteraction}
-                onStateChange={(state) => setLiveOverlay(state)}
+                onUserInteract={() => {}}
+                onEnterPlanning={enterPlanning}
+                onPlanningCartChange={setPlanningCartNorm}
+                onTargetChange={setTargetNorm}
+                onBuilderChange={(state) => setBuilderOverlay(state)}
                 onActionsReady={(actions) => {
                   overlayActionsRef.current = actions;
                 }}
@@ -1295,16 +1172,15 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 10, opacity: 0.85 }}>
-                  Near hole:{" "}
-                  <b>{youToHoleYards != null ? `${youToHoleYards} yd` : "—"}</b>
-                </div>
-
                 <div style={{ marginTop: 10, opacity: 0.95 }}>
                   Saved Nine: <b>{savedCountNine}</b>
                 </div>
                 <div style={{ opacity: 0.95 }}>
                   Saved Course: <b>{savedCountCourse}</b>
+                </div>
+
+                <div style={{ marginTop: 10, opacity: 0.95 }}>
+                  Planning: <b>{planningMode ? "ON" : "OFF"}</b>
                 </div>
               </div>
             )}
@@ -1322,7 +1198,7 @@ export default function App() {
                 background: "white",
                 color: "black",
                 fontWeight: 900,
-                fontSize: 18 * 1.15,
+                fontSize: 20,
                 zIndex: 10000,
                 opacity: setupEnabled ? 0.8 : 1,
               }}
@@ -1371,6 +1247,28 @@ export default function App() {
               HOME
             </button>
 
+            {planningMode && (
+              <button
+                onClick={cancelPlanning}
+                style={{
+                  position: "fixed",
+                  right: 10,
+                  top: TOP_BTN_TOP + TOP_BTN_H + 8 + 46 + 46,
+                  width: TOP_BTN_W,
+                  height: 38,
+                  borderRadius: 12,
+                  border: "1px solid #333",
+                  background: "#f3f3f3",
+                  color: "black",
+                  fontWeight: 900,
+                  fontSize: 14,
+                  zIndex: 10000,
+                }}
+              >
+                CANCEL
+              </button>
+            )}
+
             {setupEnabled && (
               <div
                 style={{
@@ -1401,46 +1299,31 @@ export default function App() {
                   SETUP MODE
                 </div>
 
-                <button
-                  onClick={handleSaveABC}
-                  style={styleSetupBtn("white")}
-                >
-                  Save ABC
+                <button onClick={handleSaveA0C0} style={styleSetupBtn("white")}>
+                  Save A0 C0
                 </button>
 
-                <button
-                  onClick={handleClearABC}
-                  style={styleSetupBtn("#f3f3f3")}
-                >
-                  Clear ABC
+                <button onClick={handleClearA0C0} style={styleSetupBtn("#f3f3f3")}>
+                  Clear A0 C0
                 </button>
 
-                <button
-                  onClick={handleExportCurrentNine}
-                  style={styleSetupBtn("white")}
-                >
-                  Export Current Nine
+                <button onClick={handleExportCurrentNine} style={styleSetupBtn("white")}>
+                  Export Current Nine A0 C0
                 </button>
 
-                <button
-                  onClick={handleExportCurrentCourse}
-                  style={styleSetupBtn("white")}
-                >
-                  Export Current Course
+                <button onClick={handleExportCurrentCourse} style={styleSetupBtn("white")}>
+                  Export Current Course A0 C0
                 </button>
 
                 <button
                   onClick={() => overlayActionsRef.current?.copyOverlayJson?.()}
                   style={styleSetupBtn("white")}
                 >
-                  Copy Overlay
+                  Copy A0 C0
                 </button>
 
-                <button
-                  onClick={handleShowSavedStore}
-                  style={styleSetupBtn("#f3f3f3")}
-                >
-                  View Saved Store
+                <button onClick={handleShowSavedStore} style={styleSetupBtn("#f3f3f3")}>
+                  View Saved A0 C0 Store
                 </button>
 
                 <button

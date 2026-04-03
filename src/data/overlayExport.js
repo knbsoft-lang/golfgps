@@ -1,4 +1,4 @@
-const OVERLAY_EXPORT_STORAGE_KEY = "golfgps_overlayExport_v1";
+const OVERLAY_EXPORT_STORAGE_KEY = "golfgps_overlayExport_a0c0_v1";
 
 function clamp01(n) {
   return Math.max(0, Math.min(1, Number(n) || 0));
@@ -29,12 +29,14 @@ function saveStore(store) {
 }
 
 function normalizeOverlayState(state) {
-  if (!state || !state.A || !state.B || !state.C) return null;
+  const a0 = state?.A0 || state?.A;
+  const c0 = state?.C0 || state?.C;
+
+  if (!a0 || !c0) return null;
 
   return {
-    A: { x: round4(state.A.x), y: round4(state.A.y) },
-    B: { x: round4(state.B.x), y: round4(state.B.y) },
-    C: { x: round4(state.C.x), y: round4(state.C.y) },
+    A0: { x: round4(a0.x), y: round4(a0.y) },
+    C0: { x: round4(c0.x), y: round4(c0.y) },
   };
 }
 
@@ -80,7 +82,8 @@ export function clearOverlayForHole(courseKey, nineName, holeNumber) {
 
 export function getSavedOverlayForHole(courseKey, nineName, holeNumber) {
   const store = loadStore();
-  return store?.[courseKey]?.[nineName]?.[String(holeNumber)] || null;
+  const raw = store?.[courseKey]?.[nineName]?.[String(holeNumber)] || null;
+  return normalizeOverlayState(raw);
 }
 
 export function getSavedCountForNine(courseKey, nineName) {
@@ -127,7 +130,7 @@ function safeFilePart(s) {
     .replace(/[^a-zA-Z0-9_\-]/g, "");
 }
 
-export function downloadOverlayJson(data, fileNameBase = "overlay_export") {
+export function downloadOverlayJson(data, fileNameBase = "a0c0_export") {
   if (!data) return false;
 
   const json = JSON.stringify(data, null, 2);
@@ -146,9 +149,9 @@ export function downloadOverlayJson(data, fileNameBase = "overlay_export") {
 }
 
 export function makeNineExportFileName(courseKey, nineName) {
-  return `${safeFilePart(courseKey)}_${safeFilePart(nineName)}_overlay_export`;
+  return `${safeFilePart(courseKey)}_${safeFilePart(nineName)}_a0c0_export`;
 }
 
 export function makeCourseExportFileName(courseKey) {
-  return `${safeFilePart(courseKey)}_course_overlay_export`;
+  return `${safeFilePart(courseKey)}_course_a0c0_export`;
 }

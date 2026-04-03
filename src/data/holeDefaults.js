@@ -1,12 +1,11 @@
 // src/data/holeDefaults.js
-// Stores per-hole A/C/B positions in localStorage.
-// Key format: "BelleGlades-Calusa-01" etc.
+// Stores per-hole hidden A0/C0 positions in localStorage.
 
 export function clamp01(n) {
-  return Math.max(0, Math.min(1, n));
+  return Math.max(0, Math.min(1, Number(n) || 0));
 }
 
-const STORAGE_KEY = "golfgps_hole_defaults_v2";
+const STORAGE_KEY = "golfgps_hole_defaults_a0c0_v1";
 
 function readAll() {
   try {
@@ -25,22 +24,25 @@ function writeAll(obj) {
   }
 }
 
-export function getHoleDefaults(holeKey) {
-  const all = readAll();
-  return all[holeKey] || null;
+function normalizeData(data) {
+  const a0 = data?.A0 || data?.A;
+  const c0 = data?.C0 || data?.C;
+
+  return {
+    A0: a0 ? { x: clamp01(a0.x), y: clamp01(a0.y) } : undefined,
+    C0: c0 ? { x: clamp01(c0.x), y: clamp01(c0.y) } : undefined,
+  };
 }
 
-// data can contain: {A, C, B, Bactive}
+export function getHoleDefaults(holeKey) {
+  const all = readAll();
+  const raw = all[holeKey] || null;
+  return raw ? normalizeData(raw) : null;
+}
+
 export function setHoleDefaults(holeKey, data) {
   const all = readAll();
-
-  all[holeKey] = {
-    A: data?.A ? { x: clamp01(data.A.x), y: clamp01(data.A.y) } : undefined,
-    C: data?.C ? { x: clamp01(data.C.x), y: clamp01(data.C.y) } : undefined,
-    B: data?.B ? { x: clamp01(data.B.x), y: clamp01(data.B.y) } : undefined,
-    Bactive: !!data?.Bactive,
-  };
-
+  all[holeKey] = normalizeData(data);
   writeAll(all);
 }
 
@@ -52,7 +54,6 @@ export function clearHoleDefaults(holeKey) {
   }
 }
 
-/** Export ALL defaults (every hole) as a JSON string you can copy/paste */
 export function exportAllDefaults() {
   const all = readAll();
   return JSON.stringify(
@@ -67,7 +68,6 @@ export function exportAllDefaults() {
   );
 }
 
-/** Import defaults from JSON string (overwrites existing keys with imported ones) */
 export function importAllDefaults(jsonString) {
   let parsed;
   try {
@@ -90,12 +90,7 @@ export function importAllDefaults(jsonString) {
     if (!holeKey) continue;
     if (!data || typeof data !== "object") continue;
 
-    merged[holeKey] = {
-      A: data?.A ? { x: clamp01(data.A.x), y: clamp01(data.A.y) } : undefined,
-      C: data?.C ? { x: clamp01(data.C.x), y: clamp01(data.C.y) } : undefined,
-      B: data?.B ? { x: clamp01(data.B.x), y: clamp01(data.B.y) } : undefined,
-      Bactive: !!data?.Bactive,
-    };
+    merged[holeKey] = normalizeData(data);
     count++;
   }
 
@@ -103,7 +98,6 @@ export function importAllDefaults(jsonString) {
   return { ok: true, imported: count };
 }
 
-/** (Optional) Clear everything */
 export function clearAllDefaults() {
   try {
     localStorage.removeItem(STORAGE_KEY);
