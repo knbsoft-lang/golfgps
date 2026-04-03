@@ -16,6 +16,12 @@ function distPx(p1, p2) {
   return Math.hypot(dx, dy);
 }
 
+function distNorm(p1, p2) {
+  const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
+  const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
+  return Math.hypot(dx, dy);
+}
+
 function closestPointOnSegment(P, A, B) {
   const ABx = B.x - A.x;
   const ABy = B.y - A.y;
@@ -89,6 +95,8 @@ export default function HoleOverlay({
   planningMode = false,
   planningCartNorm = null,
   targetNorm = null,
+  targetVisible = false,
+  targetSuppressRadiusNorm = 0,
   youAccuracyMeters = null,
   onUserInteract = null,
   onEnterPlanning = null,
@@ -217,7 +225,7 @@ export default function HoleOverlay({
     if (which === "A0" && setupEnabled) center = A0;
     if (which === "C0" && setupEnabled) center = C0;
     if (which === "planningCart" && planningMode && planningCartNorm) center = planningCartNorm;
-    if (which === "target" && planningMode && targetNorm) center = targetNorm;
+    if (which === "target" && planningMode && targetNorm && targetVisible) center = targetNorm;
 
     if (!center) return;
 
@@ -274,8 +282,8 @@ export default function HoleOverlay({
   const displayCartPx =
     imageBox && displayCartNorm ? pxFromNormInBox(displayCartNorm, imageBox) : null;
 
-  function handleWhiteLinePointerDown(e) {
-    if (!liveCartPx || !C0px || planningMode || !imageBox || !onEnterPlanning) return;
+  function handleLineTap(e, fromCart = false) {
+    if (!imageBox || !displayCartPx || !C0px || !onEnterPlanning) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -285,13 +293,28 @@ export default function HoleOverlay({
     const p = getNormFromPointer(e);
     if (!p) return;
 
-    const cp = closestPointOnSegment(p.px, liveCartPx, C0px);
+    const cp = closestPointOnSegment(p.px, displayCartPx, C0px);
     const nextTarget = {
       x: clamp01((cp.x - imageBox.left) / imageBox.width),
       y: clamp01((cp.y - imageBox.top) / imageBox.height),
     };
 
-    onEnterPlanning(nextTarget);
+    const cartNormForDecision = planningMode ? planningCartNorm : liveCartNorm;
+    const nearCart =
+      cartNormForDecision &&
+      distNorm(cartNormForDecision, nextTarget) <= (targetSuppressRadiusNorm || 0);
+
+    if (!planningMode) {
+      if (fromCart || nearCart) {
+        onEnterPlanning(null);
+      } else {
+        onEnterPlanning(nextTarget);
+      }
+      return;
+    }
+
+    if (nearCart) return;
+    if (onTargetChange) onTargetChange(nextTarget);
   }
 
   const ringPx = ringPxFromAccuracy(youAccuracyMeters);
@@ -357,12 +380,37 @@ export default function HoleOverlay({
               strokeWidth="26"
               strokeLinecap="round"
               style={{ pointerEvents: "stroke" }}
-              onPointerDown={handleWhiteLinePointerDown}
+              onPointerDown={(e) => handleLineTap(e, false)}
             />
           </>
         )}
 
-        {planningMode && planningCartPx && targetPx && C0px && (
+        {planningMode && displayCartPx && C0px && !targetVisible && (
+          <>
+            <line
+              x1={displayCartPx.x}
+              y1={displayCartPx.y}
+              x2={C0px.x}
+              y2={C0px.y}
+              stroke="lime"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            <line
+              x1={displayCartPx.x}
+              y1={displayCartPx.y}
+              x2={C0px.x}
+              y2={C0px.y}
+              stroke="rgba(0,0,0,0)"
+              strokeWidth="26"
+              strokeLinecap="round"
+              style={{ pointerEvents: "stroke" }}
+              onPointerDown={(e) => handleLineTap(e, false)}
+            />
+          </>
+        )}
+
+        {planningMode && planningCartPx && targetPx && targetVisible && C0px && (
           <>
             <line
               x1={planningCartPx.x}
@@ -408,31 +456,33 @@ export default function HoleOverlay({
                 height: ringPx * 2,
                 borderRadius: 999,
                 border: "2px solid rgba(0,140,255,0.85)",
-                background: "rgba(0,140,255,0.12)",
+                background: "rgba(0,140,255,0.08)",
                 boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
               }}
             />
           </div>
 
+          <CartHitArea
+            px={displayCartPx}
+            onDown={(e) => {
+              if (!planningMode) {
+                handleLineTap(e, true);
+                return;
+              }
+              onPointerDown("planningCart", e);
+            }}
+          />
+
           <CartIcon px={displayCartPx} />
         </>
       )}
 
-      {C0px && (
-        <GreenMarker px={C0px} />
-      )}
+      {C0px && <GreenMarker px={C0px} />}
 
-      {planningMode && targetPx && (
+      {planningMode && targetPx && targetVisible && (
         <TargetMarker
           px={targetPx}
           onDown={(e) => onPointerDown("target", e)}
-        />
-      )}
-
-      {planningMode && planningCartPx && (
-        <PlanningCartHit
-          px={planningCartPx}
-          onDown={(e) => onPointerDown("planningCart", e)}
         />
       )}
 
@@ -440,7 +490,9 @@ export default function HoleOverlay({
         <BuilderMarker
           label="A0"
           px={A0px}
-          color="#ffd400"
+          color="rgba(255,212,0,0.10)"
+          borderColor="#ffd400"
+          dotColor="white"
           onDown={(e) => onPointerDown("A0", e)}
         />
       )}
@@ -449,7 +501,9 @@ export default function HoleOverlay({
         <BuilderMarker
           label="C0"
           px={C0px}
-          color="#ff5252"
+          color="rgba(255,82,82,0.10)"
+          borderColor="#ff5252"
+          dotColor="white"
           onDown={(e) => onPointerDown("C0", e)}
         />
       )}
@@ -457,7 +511,7 @@ export default function HoleOverlay({
   );
 }
 
-function BuilderMarker({ label, px, color, onDown }) {
+function BuilderMarker({ label, px, color, borderColor, dotColor, onDown }) {
   return (
     <div
       style={{
@@ -472,22 +526,35 @@ function BuilderMarker({ label, px, color, onDown }) {
     >
       <div
         style={{
-          width: 44,
-          height: 44,
+          width: 42,
+          height: 42,
           borderRadius: 999,
-          border: "3px solid white",
+          border: `3px solid ${borderColor}`,
           background: color,
           boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontWeight: 900,
-          fontSize: 12,
-          color: "black",
+          fontSize: 11,
+          color: "white",
         }}
       >
         {label}
       </div>
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 7,
+          height: 7,
+          borderRadius: 999,
+          background: dotColor,
+          pointerEvents: "none",
+        }}
+      />
     </div>
   );
 }
@@ -511,7 +578,7 @@ function GreenMarker({ px }) {
           borderRadius: 999,
           border: "3px solid white",
           boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
-          background: "rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.05)",
         }}
       />
     </div>
@@ -537,7 +604,7 @@ function TargetMarker({ px, onDown }) {
           height: 34,
           borderRadius: 999,
           border: "3px solid white",
-          background: "orange",
+          background: "rgba(255,255,255,0.04)",
           boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
         }}
       />
@@ -557,7 +624,7 @@ function TargetMarker({ px, onDown }) {
   );
 }
 
-function PlanningCartHit({ px, onDown }) {
+function CartHitArea({ px, onDown }) {
   return (
     <div
       style={{
@@ -565,8 +632,8 @@ function PlanningCartHit({ px, onDown }) {
         left: px.x,
         top: px.y,
         transform: "translate(-50%, -50%)",
-        width: 64,
-        height: 64,
+        width: 72,
+        height: 72,
         borderRadius: 999,
         zIndex: 11,
         cursor: "grab",
@@ -624,7 +691,7 @@ function CartIcon({ px }) {
           height={H}
           rx={4}
           ry={4}
-          fill="rgba(0,170,255,0.82)"
+          fill="rgba(0,170,255,0.12)"
           stroke="white"
           strokeWidth={whiteStroke}
         />

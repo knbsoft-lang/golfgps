@@ -17,7 +17,7 @@ import {
   saveOverlayForHole,
 } from "./data/overlayExport";
 
-const TEST_SYNC_ID = "TEST-A0C0-01";
+const TEST_SYNC_ID = "TEST-A0C0-11";
 
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
@@ -534,6 +534,13 @@ export default function App() {
     return teeToGreenYards / baselineLen;
   }, [teeToGreenYards, baselineLen]);
 
+  const targetSuppressRadiusNorm = useMemo(() => {
+    if (!yardsPerNormUnit || !isFinite(yardsPerNormUnit) || yardsPerNormUnit <= 0) {
+      return 0;
+    }
+    return 30 / yardsPerNormUnit;
+  }, [yardsPerNormUnit]);
+
   const crossCalScale = 1.6;
 
   const crossRawYardsSigned = useMemo(() => {
@@ -836,7 +843,7 @@ export default function App() {
     if (!liveCartNorm) return;
     setPlanningMode(true);
     setPlanningCartNorm(liveCartNorm);
-    setTargetNorm(nextTargetNorm || liveCartNorm);
+    setTargetNorm(nextTargetNorm || null);
     planningStartLivePosRef.current = pos ? { lat: pos.lat, lon: pos.lon } : null;
   }
 
@@ -860,15 +867,23 @@ export default function App() {
     }
   }, [planningMode, pos]);
 
+  const targetVisible = useMemo(() => {
+    if (!planningMode || !planningCartNorm || !targetNorm) return false;
+    if (!targetSuppressRadiusNorm || targetSuppressRadiusNorm <= 0) return true;
+    return distNorm(planningCartNorm, targetNorm) > targetSuppressRadiusNorm;
+  }, [planningMode, planningCartNorm, targetNorm, targetSuppressRadiusNorm]);
+
   const planningCartToTargetYards = useMemo(() => {
     if (!planningMode || !planningCartNorm || !targetNorm || !yardsPerNormUnit) return null;
+    if (!targetVisible) return null;
     return roundYards(distNorm(planningCartNorm, targetNorm) * yardsPerNormUnit);
-  }, [planningMode, planningCartNorm, targetNorm, yardsPerNormUnit]);
+  }, [planningMode, planningCartNorm, targetNorm, yardsPerNormUnit, targetVisible]);
 
   const targetToGreenYards = useMemo(() => {
     if (!planningMode || !targetNorm || !codeC0 || !yardsPerNormUnit) return null;
+    if (!targetVisible) return null;
     return roundYards(distNorm(targetNorm, codeC0) * yardsPerNormUnit);
-  }, [planningMode, targetNorm, codeC0, yardsPerNormUnit]);
+  }, [planningMode, targetNorm, codeC0, yardsPerNormUnit, targetVisible]);
 
   return (
     <div
@@ -1014,7 +1029,7 @@ export default function App() {
               overflow: "hidden",
             }}
           >
-            {planningMode && (
+            {planningMode && targetVisible && (
               <>
                 <ArrowYardBox
                   left={ARROW_LEFT}
@@ -1080,6 +1095,8 @@ export default function App() {
                 planningMode={planningMode}
                 planningCartNorm={planningCartNorm}
                 targetNorm={targetNorm}
+                targetVisible={targetVisible}
+                targetSuppressRadiusNorm={targetSuppressRadiusNorm}
                 youAccuracyMeters={pos?.accuracyMeters ?? null}
                 onUserInteract={() => {}}
                 onEnterPlanning={enterPlanning}
