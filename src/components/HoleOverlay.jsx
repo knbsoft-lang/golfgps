@@ -1,4 +1,3 @@
-// src/components/HoleOverlay.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 function clamp01(n) {
@@ -8,12 +7,6 @@ function clamp01(n) {
 function normPoint(p, fallback) {
   if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
   return { x: clamp01(p.x), y: clamp01(p.y) };
-}
-
-function distPx(p1, p2) {
-  const dx = (p2.x || 0) - (p1.x || 0);
-  const dy = (p2.y || 0) - (p1.y || 0);
-  return Math.hypot(dx, dy);
 }
 
 function distNorm(p1, p2) {
@@ -488,7 +481,6 @@ export default function HoleOverlay({
 
       {setupEnabled && A0px && (
         <BuilderMarker
-          label="A0"
           px={A0px}
           color="rgba(255,212,0,0.10)"
           borderColor="#ffd400"
@@ -499,7 +491,6 @@ export default function HoleOverlay({
 
       {setupEnabled && C0px && (
         <BuilderMarker
-          label="C0"
           px={C0px}
           color="rgba(255,82,82,0.10)"
           borderColor="#ff5252"
@@ -511,7 +502,7 @@ export default function HoleOverlay({
   );
 }
 
-function BuilderMarker({ label, px, color, borderColor, dotColor, onDown }) {
+function BuilderMarker({ px, color, borderColor, dotColor, onDown }) {
   return (
     <div
       style={{
@@ -532,16 +523,8 @@ function BuilderMarker({ label, px, color, borderColor, dotColor, onDown }) {
           border: `3px solid ${borderColor}`,
           background: color,
           boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 900,
-          fontSize: 11,
-          color: "white",
         }}
-      >
-        {label}
-      </div>
+      />
       <div
         style={{
           position: "absolute",

@@ -272,7 +272,6 @@ export default function App() {
       setMode(s.mode || "");
       setNineA(s.nineA || "");
       setNineB(s.nineB || "");
-      setStartHoleDisplay(String(s.startHoleDisplay || "1"));
 
       pendingRestoreRef.current = {
         page: s.page || "home",
@@ -344,9 +343,6 @@ export default function App() {
 
   useEffect(() => setIdx(0), [courseType, clubKey, mode, nineA, nineB]);
 
-  const [startHoleDisplay, setStartHoleDisplay] = useState("1");
-  useEffect(() => setStartHoleDisplay("1"), [courseType, clubKey, mode, nineA, nineB]);
-
   useEffect(() => {
     const p = pendingRestoreRef.current;
     if (!p) return;
@@ -376,7 +372,6 @@ export default function App() {
           mode,
           nineA,
           nineB,
-          startHoleDisplay,
           desiredDisplayHole,
           t: Date.now(),
         };
@@ -389,7 +384,7 @@ export default function App() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [page, courseType, clubKey, mode, nineA, nineB, startHoleDisplay, hole]);
+  }, [page, courseType, clubKey, mode, nineA, nineB, hole]);
 
   const imgSrc =
     hole && clubKey ? holeImagePath(clubKey, hole.nine, hole.hole) : null;
@@ -669,11 +664,7 @@ export default function App() {
 
   function goPlay() {
     if (!roundReady) return;
-
-    const desired = parseInt(startHoleDisplay || "1", 10);
-    const i = roundHoles.findIndex((h) => h.displayHole === desired);
-    setIdx(i >= 0 ? i : 0);
-
+    setIdx(0);
     setPage("play");
   }
 
@@ -699,7 +690,6 @@ export default function App() {
     setMode("");
     setNineA("");
     setNineB("");
-    setStartHoleDisplay("1");
     setIdx(0);
 
     window.alert(
@@ -968,21 +958,6 @@ export default function App() {
                     />
                   )}
                 </>
-              )}
-
-              {roundReady && roundHoles.length > 0 && (
-                <SelectBox
-                  value={startHoleDisplay}
-                  onChange={setStartHoleDisplay}
-                  placeholder="Starting Hole"
-                  options={roundHoles.map((h) => ({
-                    value: String(h.displayHole),
-                    label: `Start Hole ${String(h.displayHole).padStart(
-                      2,
-                      "0"
-                    )} (${h.nine})`,
-                  }))}
-                />
               )}
             </div>
 
