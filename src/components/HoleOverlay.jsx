@@ -4,11 +4,6 @@ function clamp01(n) {
   return Math.max(0, Math.min(1, Number(n) || 0));
 }
 
-function normPoint(p, fallback) {
-  if (!p || typeof p.x !== "number" || typeof p.y !== "number") return fallback;
-  return { x: clamp01(p.x), y: clamp01(p.y) };
-}
-
 function distNorm(p1, p2) {
   const dx = (p2?.x ?? 0) - (p1?.x ?? 0);
   const dy = (p2?.y ?? 0) - (p1?.y ?? 0);
@@ -68,19 +63,20 @@ function pxFromNormInBox(norm, box) {
   };
 }
 
-function ringPxFromAccuracy(accuracyMeters) {
-  if (typeof accuracyMeters !== "number" || !isFinite(accuracyMeters)) return 12;
-  const m = Math.max(1, Math.min(35, accuracyMeters));
-  return 8 + ((m - 1) / 34) * 24;
+function lineEndpointOutsideCircle(from, to, radius) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (!isFinite(len) || len < 0.0001) return { x: from.x, y: from.y };
+  return {
+    x: from.x + (dx / len) * radius,
+    y: from.y + (dy / len) * radius,
+  };
 }
-
-const DEFAULT_A0 = { x: 0.5, y: 0.75 };
-const DEFAULT_C0 = { x: 0.5, y: 0.1 };
 
 export default function HoleOverlay({
   imageSrc,
   resetKey,
-  holeKey,
   initialA0,
   initialC0,
   setupEnabled = false,
@@ -90,13 +86,9 @@ export default function HoleOverlay({
   targetNorm = null,
   targetVisible = false,
   targetSuppressRadiusNorm = 0,
-  youAccuracyMeters = null,
-  onUserInteract = null,
   onEnterPlanning = null,
   onPlanningCartChange = null,
   onTargetChange = null,
-  onBuilderChange = null,
-  onActionsReady = null,
 }) {
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -106,8 +98,8 @@ export default function HoleOverlay({
   const [dragging, setDragging] = useState(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
 
-  const [A0, setA0] = useState(normPoint(initialA0, DEFAULT_A0));
-  const [C0, setC0] = useState(normPoint(initialC0, DEFAULT_C0));
+  const [A0, setA0] = useState(initialA0);
+  const [C0, setC0] = useState(initialC0);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -140,48 +132,11 @@ export default function HoleOverlay({
   );
 
   useEffect(() => {
-    setA0(normPoint(initialA0, DEFAULT_A0));
-    setC0(normPoint(initialC0, DEFAULT_C0));
+    setA0(initialA0);
+    setC0(initialC0);
     setDragging(null);
     dragOffsetRef.current = { x: 0, y: 0 };
   }, [resetKey, initialA0, initialC0]);
-
-  useEffect(() => {
-    if (!onBuilderChange) return;
-    onBuilderChange({ holeKey, A0, C0 });
-  }, [holeKey, A0, C0, onBuilderChange]);
-
-  function getState() {
-    return { holeKey, A0, C0 };
-  }
-
-  function getOverlayOnly() {
-    return {
-      A0: { x: +A0.x.toFixed(4), y: +A0.y.toFixed(4) },
-      C0: { x: +C0.x.toFixed(4), y: +C0.y.toFixed(4) },
-    };
-  }
-
-  function copyOverlayJson() {
-    const payload = getOverlayOnly();
-    const text = JSON.stringify(payload, null, 2);
-
-    try {
-      navigator.clipboard.writeText(text);
-      window.alert(`A0/C0 copied for ${holeKey || "hole"}:\n\n${text}`);
-    } catch {
-      window.prompt("Copy this A0/C0 JSON:", text);
-    }
-  }
-
-  useEffect(() => {
-    if (!onActionsReady) return;
-    onActionsReady({
-      getState,
-      getOverlayOnly,
-      copyOverlayJson,
-    });
-  }, [onActionsReady, holeKey, A0, C0]);
 
   function endDrag() {
     setDragging(null);
@@ -208,15 +163,11 @@ export default function HoleOverlay({
     e.preventDefault();
     e.stopPropagation();
 
-    if (onUserInteract) onUserInteract();
-
     const p = getNormFromPointer(e);
     if (!p) return;
 
     let center = null;
 
-    if (which === "A0" && setupEnabled) center = A0;
-    if (which === "C0" && setupEnabled) center = C0;
     if (which === "planningCart" && planningMode && planningCartNorm) center = planningCartNorm;
     if (which === "target" && planningMode && targetNorm && targetVisible) center = targetNorm;
 
@@ -235,22 +186,10 @@ export default function HoleOverlay({
     const p = getNormFromPointer(e);
     if (!p) return;
 
-    if (onUserInteract) onUserInteract();
-
     const next = {
       x: clamp01(p.x - dragOffsetRef.current.x),
       y: clamp01(p.y - dragOffsetRef.current.y),
     };
-
-    if (dragging === "A0" && setupEnabled) {
-      setA0(next);
-      return;
-    }
-
-    if (dragging === "C0" && setupEnabled) {
-      setC0(next);
-      return;
-    }
 
     if (dragging === "planningCart" && planningMode && onPlanningCartChange) {
       onPlanningCartChange(next);
@@ -268,20 +207,22 @@ export default function HoleOverlay({
     imageBox && planningCartNorm ? pxFromNormInBox(planningCartNorm, imageBox) : null;
   const targetPx =
     imageBox && targetNorm ? pxFromNormInBox(targetNorm, imageBox) : null;
-  const A0px = imageBox ? pxFromNormInBox(A0, imageBox) : null;
-  const C0px = imageBox ? pxFromNormInBox(C0, imageBox) : null;
+  const A0px = imageBox && A0 ? pxFromNormInBox(A0, imageBox) : null;
+  const C0px = imageBox && C0 ? pxFromNormInBox(C0, imageBox) : null;
 
   const displayCartNorm = planningMode ? planningCartNorm : liveCartNorm;
   const displayCartPx =
     imageBox && displayCartNorm ? pxFromNormInBox(displayCartNorm, imageBox) : null;
+
+  const MARKER_SIZE = 34;
+  const MARKER_RADIUS = MARKER_SIZE / 2;
+  const CART_RADIUS = MARKER_SIZE / 2;
 
   function handleLineTap(e, fromCart = false) {
     if (!imageBox || !displayCartPx || !C0px || !onEnterPlanning) return;
 
     e.preventDefault();
     e.stopPropagation();
-
-    if (onUserInteract) onUserInteract();
 
     const p = getNormFromPointer(e);
     if (!p) return;
@@ -310,7 +251,37 @@ export default function HoleOverlay({
     if (onTargetChange) onTargetChange(nextTarget);
   }
 
-  const ringPx = ringPxFromAccuracy(youAccuracyMeters);
+  const normalLine =
+    displayCartPx && C0px
+      ? {
+          from: lineEndpointOutsideCircle(displayCartPx, C0px, CART_RADIUS),
+          to: lineEndpointOutsideCircle(C0px, displayCartPx, MARKER_RADIUS),
+        }
+      : null;
+
+  const planningGreenLine =
+    planningMode && displayCartPx && C0px && !targetVisible
+      ? {
+          from: lineEndpointOutsideCircle(displayCartPx, C0px, CART_RADIUS),
+          to: lineEndpointOutsideCircle(C0px, displayCartPx, MARKER_RADIUS),
+        }
+      : null;
+
+  const planningCartToTargetLine =
+    planningMode && planningCartPx && targetPx && targetVisible
+      ? {
+          from: lineEndpointOutsideCircle(planningCartPx, targetPx, CART_RADIUS),
+          to: lineEndpointOutsideCircle(targetPx, planningCartPx, MARKER_RADIUS),
+        }
+      : null;
+
+  const targetToGreenLine =
+    planningMode && targetPx && targetVisible && C0px
+      ? {
+          from: lineEndpointOutsideCircle(targetPx, C0px, MARKER_RADIUS),
+          to: lineEndpointOutsideCircle(C0px, targetPx, MARKER_RADIUS),
+        }
+      : null;
 
   return (
     <div
@@ -353,13 +324,13 @@ export default function HoleOverlay({
           zIndex: 2,
         }}
       >
-        {displayCartPx && C0px && !planningMode && (
+        {normalLine && !planningMode && (
           <>
             <line
-              x1={displayCartPx.x}
-              y1={displayCartPx.y}
-              x2={C0px.x}
-              y2={C0px.y}
+              x1={normalLine.from.x}
+              y1={normalLine.from.y}
+              x2={normalLine.to.x}
+              y2={normalLine.to.y}
               stroke="lime"
               strokeWidth="3"
               strokeLinecap="round"
@@ -378,13 +349,13 @@ export default function HoleOverlay({
           </>
         )}
 
-        {planningMode && displayCartPx && C0px && !targetVisible && (
+        {planningGreenLine && (
           <>
             <line
-              x1={displayCartPx.x}
-              y1={displayCartPx.y}
-              x2={C0px.x}
-              y2={C0px.y}
+              x1={planningGreenLine.from.x}
+              y1={planningGreenLine.from.y}
+              x2={planningGreenLine.to.x}
+              y2={planningGreenLine.to.y}
               stroke="lime"
               strokeWidth="3"
               strokeLinecap="round"
@@ -403,22 +374,22 @@ export default function HoleOverlay({
           </>
         )}
 
-        {planningMode && planningCartPx && targetPx && targetVisible && C0px && (
+        {planningCartToTargetLine && targetToGreenLine && (
           <>
             <line
-              x1={planningCartPx.x}
-              y1={planningCartPx.y}
-              x2={targetPx.x}
-              y2={targetPx.y}
+              x1={planningCartToTargetLine.from.x}
+              y1={planningCartToTargetLine.from.y}
+              x2={planningCartToTargetLine.to.x}
+              y2={planningCartToTargetLine.to.y}
               stroke="lime"
               strokeWidth="3"
               strokeLinecap="round"
             />
             <line
-              x1={targetPx.x}
-              y1={targetPx.y}
-              x2={C0px.x}
-              y2={C0px.y}
+              x1={targetToGreenLine.from.x}
+              y1={targetToGreenLine.from.y}
+              x2={targetToGreenLine.to.x}
+              y2={targetToGreenLine.to.y}
               stroke="lime"
               strokeWidth="3"
               strokeLinecap="round"
@@ -429,32 +400,6 @@ export default function HoleOverlay({
 
       {displayCartPx && (
         <>
-          <div
-            style={{
-              position: "absolute",
-              left: displayCartPx.x,
-              top: displayCartPx.y,
-              transform: "translate(-50%, -50%)",
-              zIndex: 3,
-              pointerEvents: "none",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                left: "50%",
-                top: "50%",
-                transform: "translate(-50%, -50%)",
-                width: ringPx * 2,
-                height: ringPx * 2,
-                borderRadius: 999,
-                border: "2px solid rgba(0,140,255,0.85)",
-                background: "rgba(0,140,255,0.08)",
-                boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
-              }}
-            />
-          </div>
-
           <CartHitArea
             px={displayCartPx}
             onDown={(e) => {
@@ -466,43 +411,61 @@ export default function HoleOverlay({
             }}
           />
 
-          <CartIcon px={displayCartPx} />
+          <CartIcon px={displayCartPx} size={MARKER_SIZE} />
         </>
       )}
 
-      {C0px && <GreenMarker px={C0px} />}
+      {C0px && <GreenMarker px={C0px} size={MARKER_SIZE} />}
 
       {planningMode && targetPx && targetVisible && (
         <TargetMarker
           px={targetPx}
+          size={MARKER_SIZE}
           onDown={(e) => onPointerDown("target", e)}
         />
       )}
 
       {setupEnabled && A0px && (
-        <BuilderMarker
-          px={A0px}
-          color="rgba(255,212,0,0.10)"
-          borderColor="#ffd400"
-          dotColor="white"
-          onDown={(e) => onPointerDown("A0", e)}
-        />
-      )}
-
-      {setupEnabled && C0px && (
-        <BuilderMarker
-          px={C0px}
-          color="rgba(255,82,82,0.10)"
-          borderColor="#ff5252"
-          dotColor="white"
-          onDown={(e) => onPointerDown("C0", e)}
-        />
+        <TemplateAnchor px={A0px} size={MARKER_SIZE} color="#ffd400" />
       )}
     </div>
   );
 }
 
-function BuilderMarker({ px, color, borderColor, dotColor, onDown }) {
+function Crosshair({ color = "white" }) {
+  return (
+    <>
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: 12,
+          height: 2,
+          transform: "translate(-50%, -50%)",
+          background: color,
+          borderRadius: 2,
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: 2,
+          height: 12,
+          transform: "translate(-50%, -50%)",
+          background: color,
+          borderRadius: 2,
+          pointerEvents: "none",
+        }}
+      />
+    </>
+  );
+}
+
+function TemplateAnchor({ px, size, color }) {
   return (
     <div
       style={{
@@ -511,38 +474,24 @@ function BuilderMarker({ px, color, borderColor, dotColor, onDown }) {
         top: px.y,
         transform: "translate(-50%, -50%)",
         zIndex: 8,
-        cursor: "grab",
+        pointerEvents: "none",
       }}
-      onPointerDown={onDown}
     >
       <div
         style={{
-          width: 42,
-          height: 42,
+          width: size,
+          height: size,
           borderRadius: 999,
-          border: `3px solid ${borderColor}`,
-          background: color,
-          boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
+          border: `3px solid ${color}`,
+          background: "transparent",
         }}
       />
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: 7,
-          height: 7,
-          borderRadius: 999,
-          background: dotColor,
-          pointerEvents: "none",
-        }}
-      />
+      <Crosshair color="white" />
     </div>
   );
 }
 
-function GreenMarker({ px }) {
+function GreenMarker({ px, size }) {
   return (
     <div
       style={{
@@ -556,31 +505,19 @@ function GreenMarker({ px }) {
     >
       <div
         style={{
-          width: 20,
-          height: 20,
+          width: size,
+          height: size,
           borderRadius: 999,
           border: "3px solid lime",
-          boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
           background: "rgba(0,255,0,0.06)",
         }}
       />
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: 6,
-          height: 6,
-          borderRadius: 999,
-          background: "lime",
-        }}
-      />
+      <Crosshair color="white" />
     </div>
   );
 }
 
-function TargetMarker({ px, onDown }) {
+function TargetMarker({ px, size, onDown }) {
   return (
     <div
       style={{
@@ -595,26 +532,14 @@ function TargetMarker({ px, onDown }) {
     >
       <div
         style={{
-          width: 34,
-          height: 34,
+          width: size,
+          height: size,
           borderRadius: 999,
           border: "3px solid lime",
           background: "rgba(0,255,0,0.04)",
-          boxShadow: "0 0 0 3px rgba(0,0,0,0.45)",
         }}
       />
-      <div
-        style={{
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          width: 8,
-          height: 8,
-          transform: "translate(-50%, -50%)",
-          borderRadius: 999,
-          background: "lime",
-        }}
-      />
+      <Crosshair color="white" />
     </div>
   );
 }
@@ -638,16 +563,7 @@ function CartHitArea({ px, onDown }) {
   );
 }
 
-function CartIcon({ px }) {
-  const W = 26;
-  const H = 36;
-  const x = 12;
-  const y = 12;
-  const wheelInset = 4;
-  const wheelLen = 7;
-  const whiteStroke = 2.6;
-  const blackStroke = 5;
-
+function CartIcon({ px, size }) {
   return (
     <div
       style={{
@@ -657,80 +573,18 @@ function CartIcon({ px }) {
         transform: "translate(-50%, -50%)",
         zIndex: 10,
         pointerEvents: "none",
-        filter:
-          "drop-shadow(0 0 6px rgba(0,0,0,0.9)) drop-shadow(0 3px 8px rgba(0,0,0,0.65))",
       }}
     >
-      <svg
-        width={W + 24}
-        height={H + 24}
-        viewBox={`0 0 ${W + 24} ${H + 24}`}
-        style={{ overflow: "visible" }}
-      >
-        <rect
-          x={x}
-          y={y}
-          width={W}
-          height={H}
-          rx={4}
-          ry={4}
-          fill="none"
-          stroke="black"
-          strokeWidth={blackStroke}
-        />
-
-        <rect
-          x={x}
-          y={y}
-          width={W}
-          height={H}
-          rx={4}
-          ry={4}
-          fill="rgba(0,255,0,0.10)"
-          stroke="lime"
-          strokeWidth={whiteStroke}
-        />
-
-        <line
-          x1={x + wheelInset}
-          y1={y + 6}
-          x2={x + wheelInset}
-          y2={y + 6 + wheelLen}
-          stroke="lime"
-          strokeWidth={2.4}
-          strokeLinecap="round"
-        />
-        <line
-          x1={x + wheelInset}
-          y1={y + H - 6 - wheelLen}
-          x2={x + wheelInset}
-          y2={y + H - 6}
-          stroke="lime"
-          strokeWidth={2.4}
-          strokeLinecap="round"
-        />
-
-        <line
-          x1={x + W - wheelInset}
-          y1={y + 6}
-          x2={x + W - wheelInset}
-          y2={y + 6 + wheelLen}
-          stroke="lime"
-          strokeWidth={2.4}
-          strokeLinecap="round"
-        />
-        <line
-          x1={x + W - wheelInset}
-          y1={y + H - 6 - wheelLen}
-          x2={x + W - wheelInset}
-          y2={y + H - 6}
-          stroke="lime"
-          strokeWidth={2.4}
-          strokeLinecap="round"
-        />
-
-        <circle cx={x + W / 2} cy={y + H / 2} r={3} fill="lime" />
-      </svg>
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 999,
+          border: "3px solid lime",
+          background: "rgba(0,255,0,0.06)",
+        }}
+      />
+      <Crosshair color="white" />
     </div>
   );
 }
