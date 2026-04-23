@@ -4,12 +4,12 @@ import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 
-const TEST_SYNC_ID = "TEST-FIXED-TEMPLATE-10";
+const TEST_SYNC_ID = "TEST-BEARING-11";
 
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
 
-const SESSION_KEY = "golfgps_lastSession_fixed_template_v5";
+const SESSION_KEY = "golfgps_lastSession_fixed_template_v6";
 const FRESH_ON_NEXT_OPEN_KEY = "golfgps_freshOnNextOpen_v1";
 
 const FIXED_IMAGE_A0 = { x: 0.5, y: 0.9141 };
@@ -61,30 +61,29 @@ function buildRound(club, mode, nineA, nineB) {
   return [...front, ...back];
 }
 
+function bearingRad(p1, p2) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const lat1 = toRad(p1.lat);
+  const lat2 = toRad(p2.lat);
+  const dLon = toRad(p2.lon - p1.lon);
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+  return Math.atan2(y, x);
+}
+
+function angleDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
 function projectAlongTeeGreen(tee, green, pos) {
   if (!tee || !green || !pos) return null;
-
-  const toRad = (d) => (d * Math.PI) / 180;
-
-  const bearingRad = (p1, p2) => {
-    const lat1 = toRad(p1.lat);
-    const lat2 = toRad(p2.lat);
-    const dLon = toRad(p2.lon - p1.lon);
-
-    const y = Math.sin(dLon) * Math.cos(lat2);
-    const x =
-      Math.cos(lat1) * Math.sin(lat2) -
-      Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-
-    return Math.atan2(y, x);
-  };
-
-  const angleDiff = (a, b) => {
-    let d = a - b;
-    while (d > Math.PI) d -= 2 * Math.PI;
-    while (d < -Math.PI) d += 2 * Math.PI;
-    return d;
-  };
 
   const dTG = haversineMeters(tee, green);
   if (!isFinite(dTG) || dTG < 0.5) return 0;
@@ -129,8 +128,8 @@ function crossTrackMetersRightPositive(tee, green, pos) {
   return crossMeters;
 }
 
-function projectBackFromGreen(green, feet, bearingDeg = 180) {
-  if (!green || typeof feet !== "number" || !isFinite(feet)) return null;
+function projectPointFeet(start, feet, bearingDeg) {
+  if (!start || typeof feet !== "number" || !isFinite(feet)) return null;
 
   const R = 6371000;
   const toRad = (d) => (d * Math.PI) / 180;
@@ -139,8 +138,8 @@ function projectBackFromGreen(green, feet, bearingDeg = 180) {
   const distM = feet * 0.3048;
   const brg = toRad(bearingDeg);
 
-  const lat1 = toRad(green.lat);
-  const lon1 = toRad(green.lon);
+  const lat1 = toRad(start.lat);
+  const lon1 = toRad(start.lon);
 
   const lat2 = Math.asin(
     Math.sin(lat1) * Math.cos(distM / R) +
@@ -465,12 +464,15 @@ export default function App() {
     if (!hole?.green) return null;
 
     const feet = autoA0FeetForPar(hole?.par);
+
+    // bearing is expected to be from GREEN back toward TEE
+    // if missing, default to 180
     const bearingDeg =
       typeof hole?.bearing === "number" && isFinite(hole.bearing)
         ? hole.bearing
         : 180;
 
-    return projectBackFromGreen(hole.green, feet, bearingDeg);
+    return projectPointFeet(hole.green, feet, bearingDeg);
   }, [hole]);
 
   const teeToGreenYards = useMemo(() => {
