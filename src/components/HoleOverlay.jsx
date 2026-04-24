@@ -168,8 +168,13 @@ export default function HoleOverlay({
 
     let center = null;
 
-    if (which === "planningCart" && planningMode && planningCartNorm) center = planningCartNorm;
-    if (which === "target" && planningMode && targetNorm && targetVisible) center = targetNorm;
+    if (which === "planningCart" && planningMode && planningCartNorm) {
+      center = planningCartNorm;
+    }
+
+    if (which === "target" && planningMode && targetNorm && targetVisible) {
+      center = targetNorm;
+    }
 
     if (!center) return;
 
@@ -247,7 +252,11 @@ export default function HoleOverlay({
       return;
     }
 
-    if (nearCart) return;
+    if (nearCart) {
+      if (onTargetChange) onTargetChange(null);
+      return;
+    }
+
     if (onTargetChange) onTargetChange(nextTarget);
   }
 
@@ -428,11 +437,15 @@ export default function HoleOverlay({
       {setupEnabled && A0px && (
         <TemplateAnchor px={A0px} size={MARKER_SIZE} color="#ffd400" />
       )}
+
+      {setupEnabled && C0px && (
+        <TemplateAnchor px={C0px} size={MARKER_SIZE} color="#ff3b30" />
+      )}
     </div>
   );
 }
 
-function Crosshair({ color = "white" }) {
+function Crosshair({ color = "lime" }) {
   return (
     <>
       <div
@@ -440,7 +453,7 @@ function Crosshair({ color = "white" }) {
           position: "absolute",
           left: "50%",
           top: "50%",
-          width: 12,
+          width: 10,
           height: 2,
           transform: "translate(-50%, -50%)",
           background: color,
@@ -454,7 +467,7 @@ function Crosshair({ color = "white" }) {
           left: "50%",
           top: "50%",
           width: 2,
-          height: 12,
+          height: 10,
           transform: "translate(-50%, -50%)",
           background: color,
           borderRadius: 2,
@@ -486,7 +499,7 @@ function TemplateAnchor({ px, size, color }) {
           background: "transparent",
         }}
       />
-      <Crosshair color="white" />
+      <Crosshair color={color} />
     </div>
   );
 }
@@ -509,10 +522,21 @@ function GreenMarker({ px, size }) {
           height: size,
           borderRadius: 999,
           border: "3px solid lime",
-          background: "rgba(0,255,0,0.06)",
+          background: "rgba(0,255,0,0.04)",
         }}
       />
-      <Crosshair color="white" />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: 8,
+          height: 8,
+          transform: "translate(-50%, -50%)",
+          borderRadius: 999,
+          background: "lime",
+        }}
+      />
     </div>
   );
 }
@@ -536,10 +560,21 @@ function TargetMarker({ px, size, onDown }) {
           height: size,
           borderRadius: 999,
           border: "3px solid lime",
-          background: "rgba(0,255,0,0.04)",
+          background: "transparent",
         }}
       />
-      <Crosshair color="white" />
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: 8,
+          height: 8,
+          transform: "translate(-50%, -50%)",
+          borderRadius: 999,
+          background: "lime",
+        }}
+      />
     </div>
   );
 }
@@ -564,6 +599,11 @@ function CartHitArea({ px, onDown }) {
 }
 
 function CartIcon({ px, size }) {
+  const bodyW = size;
+  const bodyH = Math.round(size * 0.62);
+  const wheelW = 5;
+  const wheelH = 10;
+
   return (
     <div
       style={{
@@ -577,14 +617,73 @@ function CartIcon({ px, size }) {
     >
       <div
         style={{
-          width: size,
-          height: size,
-          borderRadius: 999,
+          position: "relative",
+          width: bodyW,
+          height: bodyH,
+          borderRadius: 8,
           border: "3px solid lime",
-          background: "rgba(0,255,0,0.06)",
+          background: "rgba(0,255,0,0.04)",
+          boxSizing: "border-box",
         }}
-      />
-      <Crosshair color="white" />
+      >
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            width: 8,
+            height: 8,
+            transform: "translate(-50%, -50%)",
+            borderRadius: 999,
+            background: "lime",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            left: -4,
+            top: 4,
+            width: wheelW,
+            height: wheelH,
+            borderRadius: 3,
+            background: "#111",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: -4,
+            bottom: 4,
+            width: wheelW,
+            height: wheelH,
+            borderRadius: 3,
+            background: "#111",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            right: -4,
+            top: 4,
+            width: wheelW,
+            height: wheelH,
+            borderRadius: 3,
+            background: "#111",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            right: -4,
+            bottom: 4,
+            width: wheelW,
+            height: wheelH,
+            borderRadius: 3,
+            background: "#111",
+          }}
+        />
+      </div>
     </div>
   );
 }

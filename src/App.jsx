@@ -4,7 +4,7 @@ import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 
-const TEST_SYNC_ID = "TEST-BEARING-11";
+const TEST_SYNC_ID = "RESTORE-REAL-TEE-22";
 
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
@@ -126,44 +126,6 @@ function crossTrackMetersRightPositive(tee, green, pos) {
   const crossMeters = -z / len;
 
   return crossMeters;
-}
-
-function projectPointFeet(start, feet, bearingDeg) {
-  if (!start || typeof feet !== "number" || !isFinite(feet)) return null;
-
-  const R = 6371000;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const toDeg = (r) => (r * 180) / Math.PI;
-
-  const distM = feet * 0.3048;
-  const brg = toRad(bearingDeg);
-
-  const lat1 = toRad(start.lat);
-  const lon1 = toRad(start.lon);
-
-  const lat2 = Math.asin(
-    Math.sin(lat1) * Math.cos(distM / R) +
-      Math.cos(lat1) * Math.sin(distM / R) * Math.cos(brg)
-  );
-
-  const lon2 =
-    lon1 +
-    Math.atan2(
-      Math.sin(brg) * Math.sin(distM / R) * Math.cos(lat1),
-      Math.cos(distM / R) - Math.sin(lat1) * Math.sin(lat2)
-    );
-
-  return {
-    lat: toDeg(lat2),
-    lon: toDeg(lon2),
-  };
-}
-
-function autoA0FeetForPar(par) {
-  if (par === 3) return 589;
-  if (par === 4) return 1238;
-  if (par === 5) return 1627;
-  return 1238;
 }
 
 function ArrowYardBox({ top, yards, left = 0 }) {
@@ -460,19 +422,7 @@ export default function App() {
   const greenLL = hole?.green ?? null;
 
   const teeLL = useMemo(() => {
-    if (hole?.tee) return hole.tee;
-    if (!hole?.green) return null;
-
-    const feet = autoA0FeetForPar(hole?.par);
-
-    // bearing is expected to be from GREEN back toward TEE
-    // if missing, default to 180
-    const bearingDeg =
-      typeof hole?.bearing === "number" && isFinite(hole.bearing)
-        ? hole.bearing
-        : 180;
-
-    return projectPointFeet(hole.green, feet, bearingDeg);
+    return hole?.tee ?? null;
   }, [hole]);
 
   const teeToGreenYards = useMemo(() => {
@@ -655,7 +605,9 @@ export default function App() {
     try {
       localStorage.setItem(FRESH_ON_NEXT_OPEN_KEY, "1");
       localStorage.removeItem(SESSION_KEY);
-    } catch {}
+    } catch {
+      // ignore
+    }
 
     setSetupEnabled(false);
     setPage("home");
@@ -760,6 +712,8 @@ export default function App() {
     typeof displayCenterYards === "number" && typeof greenDepth === "number"
       ? roundYards(Math.max(0, displayCenterYards - greenDepth / 2))
       : null;
+
+  const missingRealGeometry = !teeLL || !greenLL;
 
   return (
     <div
@@ -944,6 +898,27 @@ export default function App() {
               <div style={{ fontSize: 18 }}>{greenFrontYards ?? "—"}</div>
             </div>
 
+            {missingRealGeometry && (
+              <div
+                style={{
+                  position: "fixed",
+                  left: 12,
+                  right: 120,
+                  top: 12,
+                  zIndex: 10003,
+                  background: "rgba(120,0,0,0.92)",
+                  border: "2px solid rgba(255,255,255,0.25)",
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                  fontSize: 14,
+                  fontWeight: 900,
+                  lineHeight: 1.3,
+                }}
+              >
+                This hole is missing real tee or green coordinates in courses.js.
+              </div>
+            )}
+
             {imgSrc ? (
               <HoleOverlay
                 imageSrc={imgSrc}
@@ -1019,7 +994,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  A0→Green:{" "}
+                  Tee→Green:{" "}
                   <b>{teeToGreenYards != null ? `${teeToGreenYards} yd` : "—"}</b>
                 </div>
 
@@ -1041,15 +1016,6 @@ export default function App() {
                   <div style={{ marginTop: 2 }}>
                     Cal scale: <b>{crossCalScale.toFixed(3)}</b>
                   </div>
-                </div>
-
-                <div style={{ marginTop: 6 }}>
-                  Bearing:{" "}
-                  <b>
-                    {typeof hole?.bearing === "number" && isFinite(hole.bearing)
-                      ? `${hole.bearing}°`
-                      : "default 180°"}
-                  </b>
                 </div>
               </div>
             )}
