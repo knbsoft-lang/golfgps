@@ -4,7 +4,7 @@ import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 
-const TEST_SYNC_ID = "TEST-FIXED-TEMPLATE-111";
+const TEST_SYNC_ID = "TEST-FIXED-TEMPLATE-222";
 
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
@@ -12,8 +12,8 @@ const BUILD_TEST_ID =
 const SESSION_KEY = "golfgps_lastSession_fixed_template_v2";
 const FRESH_ON_NEXT_OPEN_KEY = "golfgps_freshOnNextOpen_v1";
 
-const FIXED_IMAGE_A0 = { x: 0.5, y: 0.9236 };
-const FIXED_IMAGE_C0 = { x: 0.5, y: 0.0764 };
+const FIXED_IMAGE_A0 = { x: 0.5, y: 0.9141 };
+const FIXED_IMAGE_C0 = { x: 0.5, y: 0.0859 };
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
