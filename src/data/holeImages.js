@@ -1,22 +1,26 @@
 // src/data/holeImages.js
 // Builds the URL to the hole image in /public/GolfCourses/...
 //
-// Your files are WEBP:
-// public/GolfCourses/<Club>/<Nine>/hole01.webp ... hole09.webp
+// Some courses use PNG, some use WEBP.
+
+function imageExtensionForClub(clubKey) {
+  const safeClub = String(clubKey || "").replace(/\s+/g, "");
+
+  // These two current courses are PNG
+  if (safeClub === "BroadStripesGolf") return "png";
+  if (safeClub === "OrangeBlossom") return "png";
+
+  // Default for other courses
+  return "webp";
+}
 
 export function holeImagePath(clubKey, nine, holeNumber) {
   if (!clubKey || !nine || !holeNumber) return null;
 
-  // Remove spaces from club names to match folder names
-  // "Orange Blossom" → "OrangeBlossom"
-  // "Belle Glades" → "BelleGlades"
   const safeClub = String(clubKey).replace(/\s+/g, "");
-
-  // Ensure nine name is a string
   const safeNine = String(nine);
-
-  // hole01, hole02, etc
   const hole = String(holeNumber).padStart(2, "0");
+  const ext = imageExtensionForClub(clubKey);
 
-  return `/GolfCourses/${safeClub}/${safeNine}/hole${hole}.webp`;
+  return `/GolfCourses/${safeClub}/${safeNine}/hole${hole}.${ext}`;
 }
