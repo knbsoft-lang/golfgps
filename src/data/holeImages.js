@@ -1,4 +1,6 @@
 // src/data/holeImages.js
+// Builds the URL to the hole image in /public/GolfCourses/...
+// All course images now use WEBP.
 
 export function holeImagePath(clubKey, nine, holeNumber) {
   if (!clubKey || !nine || !holeNumber) return null;
