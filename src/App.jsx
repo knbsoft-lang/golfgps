@@ -5,6 +5,8 @@ import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 
+const TEST_SYNC_ID = "TEST-FIXED-TEMPLATE-0006";
+
 const FIXED_IMAGE_A0 = { x: 0.5, y: 0.9236 };
 const FIXED_IMAGE_C0 = { x: 0.5, y: 0.0764 };
 
