@@ -18,7 +18,7 @@ export const BROAD_STRIPES = {
       { hole: 6, par: 3, hcp: 17, greenDepth: 34, tee: { lat: 28.962038, lon: -81.946031 }, green: { lat: 28.963108, lon: -81.947422 }, overlay: FIXED_TEMPLATE_OVERLAY },
       { hole: 7, par: 4, hcp: 11, greenDepth: 32, tee: { lat: 28.963426, lon: -81.946027 }, green: { lat: 28.964075, lon: -81.949823 }, overlay: FIXED_TEMPLATE_OVERLAY },
       { hole: 8, par: 4, hcp: 3, greenDepth: 27, tee: { lat: 28.963193, lon: -81.949895 }, green: { lat: 28.963828, lon: -81.953700 }, overlay: FIXED_TEMPLATE_OVERLAY },
-      { hole: 9, par: 5, hcp: 1, greenDepth: 28, tee: { lat: 28.963192, lon: -81.949888 }, green: { lat: 28.963843, lon: -81.953690 }, overlay: FIXED_TEMPLATE_OVERLAY },
+      { hole: 9, par: 5, hcp: 1, greenDepth: 28, tee: { lat: 28.963497, lon: -81.955350 }, green: { lat: 28.966046, lon: -81.959517 }, overlay: FIXED_TEMPLATE_OVERLAY },
     ],
     Back: [
       { hole: 1, par: 5, hcp: 2, greenDepth: 29, tee: { lat: 28.966776, lon: -81.959992 }, green: { lat: 28.967902, lon: -81.955053 }, overlay: FIXED_TEMPLATE_OVERLAY },
@@ -29,7 +29,7 @@ export const BROAD_STRIPES = {
       { hole: 6, par: 4, hcp: 4, greenDepth: 30, tee: { lat: 28.973310, lon: -81.955689 }, green: { lat: 28.973558, lon: -81.959536 }, overlay: FIXED_TEMPLATE_OVERLAY },
       { hole: 7, par: 5, hcp: 12, greenDepth: 33, tee: { lat: 28.974130, lon: -81.960621 }, green: { lat: 28.970011, lon: -81.958758 }, overlay: FIXED_TEMPLATE_OVERLAY },
       { hole: 8, par: 4, hcp: 8, greenDepth: 29, tee: { lat: 28.969031, lon: -81.957290 }, green: { lat: 28.970227, lon: -81.960908 }, overlay: FIXED_TEMPLATE_OVERLAY },
-      { hole: 9, par: 4, hcp: 6, greenDepth: 27, tee: { lat: 28.970410, lon: -81.961833 }, green: { lat: 28.967369, lon: -81.960175 }, overlay: FIXED_TEMPLATE_OVERLAY },
+      { hole: 9, par: 4, hcp: 6, greenDepth: 27, tee: { lat: 28.970410, lon: -81.961833 }, green: { lat: 28.966046, lon: -81.959517 }, overlay: FIXED_TEMPLATE_OVERLAY },
     ],
   },
 };
