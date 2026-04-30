@@ -4,7 +4,7 @@ import { haversineMeters, metersToYards, roundYards } from "./lib/geo";
 import HoleOverlay from "./components/HoleOverlay";
 import { holeImagePath } from "./data/holeImages";
 
-const TEST_SYNC_ID = "TEST-FIXED-TEMPLATE-0006";
+const TEST_SYNC_ID = "TEST-FIXED-TEMPLATE-0005";
 
 const BUILD_TEST_ID =
   typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "DEV-NO-BUILD-ID";
